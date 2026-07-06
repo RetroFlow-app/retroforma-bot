@@ -1,0 +1,11 @@
+{
+    "id": 360,
+    "title": "Misja CAD #360",
+    "difficulty": "Trudny",
+    "points": 50,
+    "xp": 250,
+    "description": "Na podstawie schematu odtwórz model 3D w dowolnym programie CAD.",
+    "published": false,
+    "closed": false,
+    "messageId": null
+}

@@ -1,0 +1,22 @@
+{
+  "missionChannelId": "1522943440269217884",
+  "submitChannelId": "1522945200291451010",
+  "reviewChannelId": "1523428183297228912",
+  "reviewRoleId": "1523423562931769344",
+  "rankingChannelId": "1522945761715818627",
+  "logChannelId": "1522986607786070157",
+  "poligonStartAt": "2026-07-07T16:00:00+02:00",
+  "missionIntervalDays": 2,
+  "missionPublishHour": 16,
+  "missionCloseHour": 15,
+  "timezone": "Europe/Warsaw",
+  "branding": {
+    "name": "RetroForma Poligon",
+    "footer": "RetroForma • Poligon CAD",
+    "colorSuccess": "#57F287",
+    "colorError": "#ED4245",
+    "colorInfo": "#5865F2",
+    "colorMission": "#FEE75C",
+    "colorRanking": "#FAA61A"
+  }
+}
