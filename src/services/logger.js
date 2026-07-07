@@ -3,9 +3,17 @@ const { createLogEmbed } = require("../utils/embedFactory");
 
 // Wysyła wiadomość na kanał logów ustawiony w config.json.
 async function logToChannel(client, message) {
-    const channel = await client.channels.fetch(config.logChannelId);
+    if (!config.logChannelId) {
+        return;
+    }
 
-    if (channel) {
+    try {
+        const channel = await client.channels.fetch(config.logChannelId);
+
+        if (!channel) {
+            return;
+        }
+
         await channel.send({
             embeds: [
                 createLogEmbed({
@@ -13,6 +21,8 @@ async function logToChannel(client, message) {
                 })
             ]
         });
+    } catch (error) {
+        console.error(`Nie udało się wysłać logu na kanał: ${error.message}`);
     }
 }
 

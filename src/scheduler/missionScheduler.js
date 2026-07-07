@@ -73,6 +73,10 @@ async function checkScheduledMissions(client) {
 
 // Podłącza sprawdzanie harmonogramu co minutę.
 function startMissionScheduler(client) {
+    checkScheduledMissions(client).catch((error) => {
+        console.error(`Błąd początkowego sprawdzania misji: ${error.message}`);
+    });
+
     cron.schedule(
         "* * * * *",
         () => {
