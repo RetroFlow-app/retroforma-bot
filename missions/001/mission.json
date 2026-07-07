@@ -4,9 +4,9 @@
     "difficulty": "Średni",
     "points": 20,
     "description": "Na podstawie schematu odtwórz model 3D w dowolnym programie CAD.",
-    "publishAt": "2026-07-05T14:40:00+02:00",
-    "closeAt": "2026-07-06T15:00:00+02:00",
-    "published": true,
+    "publishAt": null,
+    "closeAt": null,
+    "published": false,
     "closed": false,
-    "messageId": "1523307460331442338"
+    "messageId": null
 }
