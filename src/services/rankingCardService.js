@@ -695,6 +695,55 @@ function drawAvatar(ctx, user, avatarImage, centerX, centerY, radius, accent) {
     ctx.stroke();
 }
 
+function drawListAvatarPlaceholder(ctx, centerX, centerY, radius, username) {
+    const gradient = ctx.createLinearGradient(centerX - radius, centerY - radius, centerX + radius, centerY + radius);
+    const initial = String(username || "?").slice(0, 1).toUpperCase();
+
+    gradient.addColorStop(0, "#162033");
+    gradient.addColorStop(1, "#050914");
+
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    ctx.fillStyle = "#d8e0ea";
+    ctx.font = `900 ${Math.floor(radius * 0.82)}px ${getFontFamily()}`;
+    ctx.textAlign = "center";
+    ctx.fillText(initial, centerX, centerY + radius * 0.3);
+    ctx.textAlign = "left";
+}
+
+function drawListAvatar(ctx, user, avatarImage, centerX, centerY, radius) {
+    ctx.save();
+    ctx.shadowColor = "rgba(0, 0, 0, 0.45)";
+    ctx.shadowBlur = 5;
+    ctx.shadowOffsetY = 2;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius + 1, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(7, 12, 18, 0.86)";
+    ctx.fill();
+    ctx.restore();
+
+    if (avatarImage) {
+        drawCircularImage(ctx, avatarImage, centerX, centerY, radius);
+    } else {
+        drawListAvatarPlaceholder(ctx, centerX, centerY, radius, user.username);
+    }
+
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius + 1.5, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(160, 171, 184, 0.72)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius + 4, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+}
+
 function drawLaurelSide(ctx, centerX, centerY, radius, side, color) {
     ctx.save();
     ctx.strokeStyle = color;
@@ -1298,7 +1347,7 @@ function drawListRow(ctx, user, avatarImage, x, y, width, index) {
         weight: "900"
     });
 
-    drawAvatar(ctx, user, avatarImage, x + 92, y + 30, 23, COLORS.gold);
+    drawListAvatar(ctx, user, avatarImage, x + 92, y + 30, 23);
     drawFittedText(ctx, trimText(user.username, 25), x + 126, y + 40, 236, {
         color: COLORS.text,
         maxSize: 21,
