@@ -219,4 +219,7 @@ test("migracja schematu nie zawiera destrukcyjnych operacji na bazie", () => {
     assert.doesNotMatch(schemaSource, /\bDROP\s+TABLE\b/i);
     assert.doesNotMatch(schemaSource, /\bVACUUM\s+INTO\b/i);
     assert.doesNotMatch(schemaSource, /\bDELETE\s+FROM\b/i);
+    assert.match(schemaSource, /CREATE TABLE IF NOT EXISTS shop_items/);
+    assert.match(schemaSource, /CREATE TABLE IF NOT EXISTS user_inventory/);
+    assert.match(schemaSource, /INSERT OR IGNORE INTO shop_items/);
 });

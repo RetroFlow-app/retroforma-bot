@@ -1,3 +1,5 @@
+const { INITIAL_SHOP_ITEMS } = require("./shopSeedData");
+
 // Sprawdza, czy tabela ma już wskazaną kolumnę.
 function hasColumn(db, tableName, columnName) {
     return db.prepare(`PRAGMA table_info(${tableName})`)
@@ -76,6 +78,40 @@ function migrateSubmissionsTable(db) {
         WHERE status IS NULL
            OR status = ''
     `).run();
+}
+
+// Dodaje startowy katalog sklepu bez nadpisywania istniejących rekordów.
+function seedShopItems(db) {
+    const createdAt = new Date().toISOString();
+    const statement = db.prepare(`
+        INSERT OR IGNORE INTO shop_items (
+            code,
+            name,
+            description,
+            category,
+            price,
+            rarity,
+            active,
+            created_at
+        )
+        VALUES (
+            @code,
+            @name,
+            @description,
+            @category,
+            @price,
+            @rarity,
+            1,
+            @createdAt
+        )
+    `);
+
+    for (const item of INITIAL_SHOP_ITEMS) {
+        statement.run({
+            ...item,
+            createdAt
+        });
+    }
 }
 
 function initializeDatabase(db) {
@@ -173,6 +209,27 @@ function initializeDatabase(db) {
             updated_at TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS shop_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            category TEXT NOT NULL,
+            price INTEGER NOT NULL,
+            rarity TEXT NOT NULL,
+            active INTEGER DEFAULT 1,
+            created_at TEXT
+        );
+
+        -- user_id przechowuje wewnętrzne users.id z SQLite, nie Discord snowflake.
+        CREATE TABLE IF NOT EXISTS user_inventory (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            item_id INTEGER NOT NULL,
+            obtained_at TEXT,
+            UNIQUE(user_id, item_id)
+        );
+
         CREATE INDEX IF NOT EXISTS idx_arsenal_items_category
             ON arsenal_items (category_id);
 
@@ -181,12 +238,23 @@ function initializeDatabase(db) {
 
         CREATE INDEX IF NOT EXISTS idx_mission_publications_message_id
             ON mission_publications (message_id);
+
+        CREATE INDEX IF NOT EXISTS idx_shop_items_category_active
+            ON shop_items (category, active);
+
+        CREATE INDEX IF NOT EXISTS idx_user_inventory_user_id
+            ON user_inventory (user_id);
+
+        CREATE INDEX IF NOT EXISTS idx_user_inventory_item_id
+            ON user_inventory (item_id);
     `);
 
     migrateUsersTable(db);
     migrateSubmissionsTable(db);
+    seedShopItems(db);
 }
 
 module.exports = {
+    seedShopItems,
     initializeDatabase
 };
