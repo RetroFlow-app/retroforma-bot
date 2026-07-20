@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+const path = require("node:path");
 
 const {
     getRarityStyle
@@ -21,6 +22,14 @@ const {
     getCatalogPreviewStartPage,
     isItemPurchasable
 } = require("../src/services/shopViewService");
+const {
+    ASSET_ROOT,
+    clearAssetCache,
+    getAssetCacheStats,
+    loadImageFromPath,
+    loadUiAssetImage,
+    resolveUiAsset
+} = require("../src/ui/assetRegistry");
 
 const PNG_SIGNATURE = "89504e470d0a1a0a";
 
@@ -393,13 +402,154 @@ test("kazda rzadkosc renderuje sie bez bledu", () => {
 });
 
 test("fallback ikony dziala bez assetu", () => {
+    const originalWarn = console.warn;
+    const warnings = [];
     const item = createItem({
         code: "brak-lokalnego-assetu",
         name: "Nieznany Modul"
     });
     const visual = resolveItemVisual(item);
 
-    assert.equal(visual.assetPath, null);
+    clearAssetCache();
+    console.warn = (message) => warnings.push(message);
+
+    try {
+        assert.equal(visual.assetPath, null);
+        assertPngBuffer(renderShopScreen({
+            catalogItems: [item],
+            item,
+            page: 1,
+            playerPP: 1000,
+            totalItems: 1,
+            totalPages: 1
+        }));
+        assert.equal(warnings.length, 1);
+        assert.match(warnings[0], /brak-lokalnego-assetu/);
+    } finally {
+        console.warn = originalWarn;
+        clearAssetCache();
+    }
+});
+
+test("registry mapuje aktualne identyfikatory itemow na finalne assety", () => {
+    const mappedItems = [
+        ["compass", ["gadgets", "compass.png"]],
+        ["kompas-analogowy", ["gadgets", "compass.png"]],
+        ["radio", ["gadgets", "radio.png"]],
+        ["radio-kieszonkowe", ["gadgets", "radio.png"]],
+        ["backpack", ["gadgets", "backpack.png"]],
+        ["smartwatch", ["gadgets", "smartwatch.png"]]
+    ];
+
+    for (const [assetId, relativePath] of mappedItems) {
+        const asset = resolveUiAsset("item", assetId);
+
+        assert.equal(asset.mapped, true);
+        assert.equal(asset.path, path.resolve(ASSET_ROOT, ...relativePath));
+    }
+});
+
+test("aparat i terminal uzywaja fallbacku dopoki nie maja wlasnych assetow", () => {
+    const cameraAsset = resolveUiAsset("item", "aparat-polaroid");
+    const terminalAsset = resolveUiAsset("item", "terminal-przenosny");
+
+    assert.equal(cameraAsset.mapped, true);
+    assert.equal(cameraAsset.path, null);
+    assert.equal(cameraAsset.fallback.shape, "camera");
+    assert.notEqual(cameraAsset.path, path.resolve(ASSET_ROOT, "gadgets", "backpack.png"));
+
+    assert.equal(terminalAsset.mapped, true);
+    assert.equal(terminalAsset.path, null);
+    assert.equal(terminalAsset.fallback.shape, "screen");
+    assert.notEqual(terminalAsset.path, path.resolve(ASSET_ROOT, "gadgets", "smartwatch.png"));
+});
+
+test("kompas i radio uzywaja prawdziwych assetow", () => {
+    const compassAsset = resolveUiAsset("item", "kompas-analogowy");
+    const radioAsset = resolveUiAsset("item", "radio-kieszonkowe");
+
+    assert.equal(compassAsset.path, path.resolve(ASSET_ROOT, "gadgets", "compass.png"));
+    assert.equal(radioAsset.path, path.resolve(ASSET_ROOT, "gadgets", "radio.png"));
+    assert.ok(loadUiAssetImage("item", "kompas-analogowy"));
+    assert.ok(loadUiAssetImage("item", "radio-kieszonkowe"));
+});
+
+test("registry przygotowuje mapowanie odznak bez przyznawania odznak", () => {
+    const cadetBadge = resolveUiAsset("badge", "cadet");
+    const firstMissionBadge = resolveUiAsset("badge", "first_mission");
+    const explorerBadge = resolveUiAsset("badge", "explorer");
+
+    assert.equal(cadetBadge.path, path.resolve(ASSET_ROOT, "badges", "cadet.png"));
+    assert.equal(firstMissionBadge.path, path.resolve(ASSET_ROOT, "badges", "cadet.png"));
+    assert.equal(explorerBadge.path, path.resolve(ASSET_ROOT, "badges", "explorer.png"));
+});
+
+test("registry zwraca neutralny fallback dla nieznanego identyfikatora", () => {
+    const asset = resolveUiAsset("item", "nieznany-przedmiot");
+
+    assert.equal(asset.mapped, false);
+    assert.equal(asset.path, null);
+    assert.equal(asset.fallback.shape, "generic");
+    assert.equal(asset.fallback.symbol, "NI");
+});
+
+test("brakujacy plik assetu nie powoduje crasha i jest cacheowany jako fallback", () => {
+    const originalWarn = console.warn;
+    const warnings = [];
+
+    clearAssetCache();
+    console.warn = (message) => warnings.push(message);
+
+    try {
+        const missingPath = path.resolve(ASSET_ROOT, "gadgets", "missing-file.png");
+
+        assert.equal(loadImageFromPath("test:missing-file", missingPath, "missing-file.png"), null);
+        assert.equal(loadImageFromPath("test:missing-file", missingPath, "missing-file.png"), null);
+        assert.equal(warnings.length, 1);
+        assert.match(warnings[0], /missing-file\.png/);
+    } finally {
+        console.warn = originalWarn;
+        clearAssetCache();
+    }
+});
+
+test("registry cacheuje obrazy i nie czyta assetu z dysku przy kazdym renderze", () => {
+    const originalReadFileSync = fs.readFileSync;
+    let readCount = 0;
+
+    clearAssetCache();
+    fs.readFileSync = (filePath, ...args) => {
+        if (String(filePath).endsWith(`${path.sep}compass.png`)) {
+            readCount += 1;
+        }
+
+        return originalReadFileSync.call(fs, filePath, ...args);
+    };
+
+    try {
+        const firstImage = loadUiAssetImage("item", "kompas-analogowy");
+        const secondImage = loadUiAssetImage("item", "kompas-analogowy");
+
+        assert.ok(firstImage);
+        assert.equal(firstImage, secondImage);
+        assert.equal(readCount, 1);
+        assert.equal(getAssetCacheStats().entries, 1);
+    } finally {
+        fs.readFileSync = originalReadFileSync;
+        clearAssetCache();
+    }
+});
+
+test("renderer sklepu uzywa prawdziwego assetu gadgetu, gdy jest dostepny", () => {
+    const item = createItem({
+        code: "kompas-analogowy",
+        name: "Kompas Analogowy",
+        price: 260,
+        rarity: "Podstawowa"
+    });
+    const visual = resolveItemVisual(item);
+
+    assert.equal(visual.assetPath, path.resolve(ASSET_ROOT, "gadgets", "compass.png"));
     assertPngBuffer(renderShopScreen({
         catalogItems: [item],
         item,
@@ -412,8 +562,11 @@ test("fallback ikony dziala bez assetu", () => {
 
 test("fallback assetu dziala, gdy lokalny plik nie moze zostac wczytany", () => {
     const originalReadFileSync = fs.readFileSync;
+    const originalWarn = console.warn;
+    const warnings = [];
 
     clearItemAssetCache();
+    console.warn = (message) => warnings.push(message);
     fs.readFileSync = (filePath, ...args) => {
         if (String(filePath).endsWith("ramka-neon.svg")) {
             throw new Error("Symulowany blad assetu.");
@@ -431,8 +584,11 @@ test("fallback assetu dziala, gdy lokalny plik nie moze zostac wczytany", () => 
             totalItems: 1,
             totalPages: 1
         }));
+        assert.equal(warnings.length, 1);
+        assert.match(warnings[0], /ramka-neon/);
     } finally {
         fs.readFileSync = originalReadFileSync;
+        console.warn = originalWarn;
         clearItemAssetCache();
     }
 });
@@ -561,7 +717,7 @@ test("render nie zapisuje pliku na dysku", () => {
         assertPngBuffer(renderShopScreen({
             catalogItems: createCatalogItems(),
             item: createItem({
-                code: "brak-lokalnego-assetu"
+                code: "motyw-crt"
             }),
             page: 1,
             playerPP: 1000,
