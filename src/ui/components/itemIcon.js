@@ -1,125 +1,29 @@
-const fs = require("node:fs");
-const path = require("node:path");
-
 const {
     COLORS,
     drawCenteredFittedText,
-    ensureCanvas,
     fillRoundedRect,
     setFont,
     strokeRoundedRect
 } = require("../renderer");
-
-const ITEMS_ASSET_DIR = path.join(__dirname, "..", "assets", "items");
-
-const ITEM_VISUALS = {
-    "ramka-neon": {
-        asset: "ramka-neon.svg",
-        shape: "frame",
-        symbol: "RF"
-    },
-    "tlo-syntetyczny-zachod": {
-        shape: "horizon",
-        symbol: "TZ"
-    },
-    "motyw-crt": {
-        shape: "screen",
-        symbol: "CRT"
-    },
-    "emblemat-explorer": {
-        shape: "compass",
-        symbol: "EX"
-    },
-    "tytul-odkrywca": {
-        shape: "tag",
-        symbol: "OD"
-    },
-    "tytul-archiwista": {
-        shape: "archive",
-        symbol: "AR"
-    },
-    "tytul-operator-sygnalu": {
-        shape: "signal",
-        symbol: "OS"
-    },
-    "tytul-weteran-poligonu": {
-        shape: "chevron",
-        symbol: "WP"
-    },
-    "kompas-analogowy": {
-        shape: "compass",
-        symbol: "KA"
-    },
-    "radio-kieszonkowe": {
-        shape: "signal",
-        symbol: "RK"
-    },
-    "aparat-polaroid": {
-        shape: "camera",
-        symbol: "AP"
-    },
-    "terminal-przenosny": {
-        shape: "screen",
-        symbol: "TP"
-    }
-};
-
-const assetExistsCache = new Map();
-const assetImageCache = new Map();
+const {
+    clearAssetCache,
+    loadUiAssetImage,
+    resolveUiAsset
+} = require("../assetRegistry");
 
 function clearItemAssetCache() {
-    assetExistsCache.clear();
-    assetImageCache.clear();
-}
-
-function resolveAssetPath(fileName) {
-    if (!fileName) {
-        return null;
-    }
-
-    const assetPath = path.join(ITEMS_ASSET_DIR, fileName);
-
-    if (!assetExistsCache.has(assetPath)) {
-        assetExistsCache.set(assetPath, fs.existsSync(assetPath));
-    }
-
-    return assetExistsCache.get(assetPath) ? assetPath : null;
+    clearAssetCache();
 }
 
 function resolveItemVisual(item = {}) {
-    const visual = ITEM_VISUALS[item.code] || {
-        shape: "generic",
-        symbol: String(item.name || "RF").slice(0, 2).toUpperCase()
-    };
+    const asset = resolveUiAsset("item", item.code || item.name);
 
     return {
-        assetPath: resolveAssetPath(visual.asset),
-        shape: visual.shape || "generic",
-        symbol: visual.symbol || "RF"
+        assetPath: asset.path,
+        mapped: asset.mapped,
+        shape: asset.fallback.shape || "generic",
+        symbol: asset.fallback.symbol || "RF"
     };
-}
-
-function loadAssetImage(assetPath) {
-    if (!assetPath) {
-        return null;
-    }
-
-    if (assetImageCache.has(assetPath)) {
-        return assetImageCache.get(assetPath);
-    }
-
-    try {
-        const { Image } = ensureCanvas();
-        const image = new Image();
-
-        image.src = fs.readFileSync(assetPath);
-        assetImageCache.set(assetPath, image);
-
-        return image;
-    } catch (error) {
-        assetImageCache.set(assetPath, null);
-        return null;
-    }
 }
 
 function drawFallbackShape(ctx, shape, centerX, centerY, size, accent) {
@@ -170,6 +74,37 @@ function drawFallbackShape(ctx, shape, centerX, centerY, size, accent) {
         ctx.moveTo(centerX - size * 0.38, centerY + size * 0.22);
         ctx.lineTo(centerX + size * 0.38, centerY + size * 0.22);
         ctx.stroke();
+    } else if (shape === "frame") {
+        strokeRoundedRect(ctx, centerX - size * 0.3, centerY - size * 0.3, size * 0.6, size * 0.6, size * 0.08, accent, ctx.lineWidth);
+        strokeRoundedRect(ctx, centerX - size * 0.2, centerY - size * 0.2, size * 0.4, size * 0.4, size * 0.06, accent, ctx.lineWidth);
+    } else if (shape === "archive") {
+        fillRoundedRect(ctx, centerX - size * 0.32, centerY - size * 0.22, size * 0.64, size * 0.42, size * 0.06, `${accent}12`);
+        strokeRoundedRect(ctx, centerX - size * 0.32, centerY - size * 0.22, size * 0.64, size * 0.42, size * 0.06, accent, ctx.lineWidth);
+        ctx.beginPath();
+        ctx.moveTo(centerX - size * 0.22, centerY - size * 0.06);
+        ctx.lineTo(centerX + size * 0.22, centerY - size * 0.06);
+        ctx.stroke();
+    } else if (shape === "tag") {
+        ctx.beginPath();
+        ctx.moveTo(centerX - size * 0.28, centerY - size * 0.18);
+        ctx.lineTo(centerX + size * 0.08, centerY - size * 0.18);
+        ctx.lineTo(centerX + size * 0.3, centerY);
+        ctx.lineTo(centerX + size * 0.08, centerY + size * 0.18);
+        ctx.lineTo(centerX - size * 0.28, centerY + size * 0.18);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+    } else if (shape === "chevron") {
+        ctx.beginPath();
+        ctx.moveTo(centerX - size * 0.3, centerY - size * 0.16);
+        ctx.lineTo(centerX, centerY + size * 0.14);
+        ctx.lineTo(centerX + size * 0.3, centerY - size * 0.16);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(centerX - size * 0.22, centerY + size * 0.04);
+        ctx.lineTo(centerX, centerY + size * 0.24);
+        ctx.lineTo(centerX + size * 0.22, centerY + size * 0.04);
+        ctx.stroke();
     } else {
         ctx.beginPath();
         ctx.rect(centerX - size * 0.28, centerY - size * 0.28, size * 0.56, size * 0.56);
@@ -190,7 +125,8 @@ function drawItemIcon(ctx, options = {}) {
     const centerX = x + size / 2;
     const centerY = y + size / 2;
     const visual = resolveItemVisual(item || {});
-    const image = loadAssetImage(visual.assetPath);
+    const assetId = item?.code || item?.name || null;
+    const image = assetId ? loadUiAssetImage("item", assetId) : null;
 
     ctx.save();
     ctx.shadowColor = `${accent}44`;
@@ -209,10 +145,20 @@ function drawItemIcon(ctx, options = {}) {
     }
     ctx.globalAlpha = 1;
 
+    let drewImage = false;
+
     if (image) {
         const imageSize = size * 0.64;
-        ctx.drawImage(image, centerX - imageSize / 2, centerY - imageSize / 2, imageSize, imageSize);
-    } else {
+
+        try {
+            ctx.drawImage(image, centerX - imageSize / 2, centerY - imageSize / 2, imageSize, imageSize);
+            drewImage = true;
+        } catch (error) {
+            console.warn(`[UI ASSET] Nie udalo sie narysowac assetu item:${item?.code || "unknown"} (${error.message})`);
+        }
+    }
+
+    if (!drewImage) {
         drawFallbackShape(ctx, visual.shape, centerX, centerY - size * 0.02, size * 0.64, accent);
         setFont(ctx, Math.max(18, size * 0.18), "800");
         ctx.fillStyle = COLORS.text;
