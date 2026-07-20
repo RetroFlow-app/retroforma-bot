@@ -50,25 +50,26 @@ function drawMiniItemCard(ctx, item, options = {}) {
     drawItemIcon(ctx, {
         accent: rarity.accent,
         item,
-        size: 56,
-        x: x + 14,
-        y: y + 18
+        imageScale: 0.76,
+        size: 72,
+        x: x + 10,
+        y: y + 16
     });
 
     setFont(ctx, 14, "800");
     ctx.fillStyle = COLORS.text;
-    drawFittedText(ctx, item?.name || "Pusty slot", x + 82, y + 34, width - 96);
+    drawFittedText(ctx, item?.name || "Pusty slot", x + 92, y + 36, width - 106);
 
     setFont(ctx, 12, "700");
     ctx.fillStyle = rarity.accent;
-    drawFittedText(ctx, rarity.label.toUpperCase(), x + 82, y + 56, width - 110);
+    drawFittedText(ctx, rarity.label.toUpperCase(), x + 92, y + 58, width - 120);
 
     setFont(ctx, 16, "800");
     ctx.fillStyle = COLORS.amber;
-    drawFittedText(ctx, priceText, x + 82, y + 84, width - 96);
+    drawFittedText(ctx, priceText, x + 92, y + 86, width - 106);
 
     if (item?.owned) {
-        drawOwnedMarker(ctx, x + width - 42, y + 20);
+        drawOwnedMarker(ctx, x + width - 42, y + 18);
     }
 }
 

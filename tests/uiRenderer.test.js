@@ -30,6 +30,9 @@ const {
     loadUiAssetImage,
     resolveUiAsset
 } = require("../src/ui/assetRegistry");
+const {
+    FRAME_SHOP_ITEM_CODES
+} = require("../src/database/shopSeedData");
 
 const PNG_SIGNATURE = "89504e470d0a1a0a";
 
@@ -91,11 +94,11 @@ function createCatalogItems() {
             selected: false
         }),
         createItem({
-            code: "emblemat-explorer",
-            name: "Emblemat Explorer",
+            code: "aparat-polaroid",
+            name: "Aparat Polaroid",
             page: 4,
-            price: 360,
-            rarity: "Niepospolita",
+            price: 520,
+            rarity: "Rzadka",
             selected: false
         })
     ];
@@ -290,7 +293,7 @@ test("renderer sklepu obsluguje 0 PP i komunikat o niedoborze", () => {
 test("renderer sklepu obsluguje duze saldo PP", () => {
     assertPngBuffer(renderShopScreen({
         catalogItems: createCatalogItems(),
-        category: "Odznaki",
+        category: "Gadzety",
         item: createItem({
             price: 2500
         }),
@@ -438,6 +441,8 @@ test("registry mapuje aktualne identyfikatory itemow na finalne assety", () => {
         ["radio", ["gadgets", "radio.png"]],
         ["radio-kieszonkowe", ["gadgets", "radio.png"]],
         ["backpack", ["gadgets", "backpack.png"]],
+        ["aparat", ["gadgets", "aparat.png"]],
+        ["aparat-polaroid", ["gadgets", "aparat.png"]],
         ["smartwatch", ["gadgets", "smartwatch.png"]]
     ];
 
@@ -449,12 +454,12 @@ test("registry mapuje aktualne identyfikatory itemow na finalne assety", () => {
     }
 });
 
-test("aparat i terminal uzywaja fallbacku dopoki nie maja wlasnych assetow", () => {
+test("aparat uzywa wlasnego assetu, a terminal pozostaje na fallbacku", () => {
     const cameraAsset = resolveUiAsset("item", "aparat-polaroid");
     const terminalAsset = resolveUiAsset("item", "terminal-przenosny");
 
     assert.equal(cameraAsset.mapped, true);
-    assert.equal(cameraAsset.path, null);
+    assert.equal(cameraAsset.path, path.resolve(ASSET_ROOT, "gadgets", "aparat.png"));
     assert.equal(cameraAsset.fallback.shape, "camera");
     assert.notEqual(cameraAsset.path, path.resolve(ASSET_ROOT, "gadgets", "backpack.png"));
 
@@ -464,14 +469,76 @@ test("aparat i terminal uzywaja fallbacku dopoki nie maja wlasnych assetow", () 
     assert.notEqual(terminalAsset.path, path.resolve(ASSET_ROOT, "gadgets", "smartwatch.png"));
 });
 
+test("wszystkie ramki mapuja sie do finalnych assetow PNG", () => {
+    const expectedFrameAssets = {
+        "ramka-amber": "amber.png",
+        "ramka-carbon": "carbon.png",
+        "ramka-cyan": "cyan.png",
+        "ramka-neon": "neon.png"
+    };
+
+    for (const frameCode of FRAME_SHOP_ITEM_CODES) {
+        const frameAsset = resolveUiAsset("item", frameCode);
+
+        assert.equal(frameAsset.mapped, true);
+        assert.equal(frameAsset.fallback.shape, "frame");
+        assert.equal(frameAsset.path, path.resolve(ASSET_ROOT, "frames", expectedFrameAssets[frameCode]));
+        assert.ok(fs.existsSync(frameAsset.path));
+        assert.equal(frameAsset.path.includes(`${path.sep}gadgets${path.sep}`), false);
+    }
+});
+
+test("brak assetu ramki nie powoduje crasha", () => {
+    const originalWarn = console.warn;
+    const originalExistsSync = fs.existsSync;
+    const warnings = [];
+    const frameItem = createItem({
+        code: "ramka-carbon",
+        name: "Ramka Carbon",
+        price: 360,
+        rarity: "Podstawowa"
+    });
+    const frameAsset = resolveUiAsset("item", frameItem.code);
+
+    clearAssetCache();
+    console.warn = (message) => warnings.push(message);
+    fs.existsSync = (filePath) => {
+        if (path.resolve(filePath) === frameAsset.path) {
+            return false;
+        }
+
+        return originalExistsSync.call(fs, filePath);
+    };
+
+    try {
+        assertPngBuffer(renderShopScreen({
+            catalogItems: [frameItem],
+            item: frameItem,
+            page: 1,
+            playerPP: 1000,
+            totalItems: 1,
+            totalPages: 1
+        }));
+
+        assert.ok(warnings.some((warning) => /ramka-carbon/.test(warning)));
+    } finally {
+        console.warn = originalWarn;
+        fs.existsSync = originalExistsSync;
+        clearAssetCache();
+    }
+});
+
 test("kompas i radio uzywaja prawdziwych assetow", () => {
     const compassAsset = resolveUiAsset("item", "kompas-analogowy");
     const radioAsset = resolveUiAsset("item", "radio-kieszonkowe");
+    const cameraAsset = resolveUiAsset("item", "aparat-polaroid");
 
     assert.equal(compassAsset.path, path.resolve(ASSET_ROOT, "gadgets", "compass.png"));
     assert.equal(radioAsset.path, path.resolve(ASSET_ROOT, "gadgets", "radio.png"));
+    assert.equal(cameraAsset.path, path.resolve(ASSET_ROOT, "gadgets", "aparat.png"));
     assert.ok(loadUiAssetImage("item", "kompas-analogowy"));
     assert.ok(loadUiAssetImage("item", "radio-kieszonkowe"));
+    assert.ok(loadUiAssetImage("item", "aparat-polaroid"));
 });
 
 test("registry przygotowuje mapowanie odznak bez przyznawania odznak", () => {
@@ -568,7 +635,7 @@ test("fallback assetu dziala, gdy lokalny plik nie moze zostac wczytany", () => 
     clearItemAssetCache();
     console.warn = (message) => warnings.push(message);
     fs.readFileSync = (filePath, ...args) => {
-        if (String(filePath).endsWith("ramka-neon.svg")) {
+        if (String(filePath).endsWith("aparat.png")) {
             throw new Error("Symulowany blad assetu.");
         }
 
@@ -577,15 +644,21 @@ test("fallback assetu dziala, gdy lokalny plik nie moze zostac wczytany", () => 
 
     try {
         assertPngBuffer(renderShopScreen({
-            catalogItems: [createItem()],
-            item: createItem(),
+            catalogItems: [
+                createItem({
+                    code: "aparat-polaroid"
+                })
+            ],
+            item: createItem({
+                code: "aparat-polaroid"
+            }),
             page: 1,
             playerPP: 1000,
             totalItems: 1,
             totalPages: 1
         }));
         assert.equal(warnings.length, 1);
-        assert.match(warnings[0], /ramka-neon/);
+        assert.match(warnings[0], /aparat-polaroid/);
     } finally {
         fs.readFileSync = originalReadFileSync;
         console.warn = originalWarn;
@@ -597,7 +670,7 @@ test("lokalny asset jest rozpoznawany, jesli istnieje", () => {
     clearItemAssetCache();
 
     const item = createItem({
-        code: "ramka-neon"
+        code: "aparat-polaroid"
     });
     const visual = resolveItemVisual(item);
 
@@ -647,7 +720,7 @@ test("model widoku pokazuje maksymalnie 4 elementy katalogu i oznacza aktywny", 
             }),
             activeItem,
             createItem({
-                code: "emblemat-explorer",
+                code: "aparat-polaroid",
                 selected: false
             }),
             createItem({

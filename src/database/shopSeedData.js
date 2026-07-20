@@ -5,14 +5,14 @@ const SHOP_CATEGORIES = [
         description: "Cała aktualna oferta RetroForma."
     },
     {
-        id: "personalizacja",
-        name: "Personalizacja",
-        description: "Elementy wyglądu profilu i przyszłego ekwipunku."
+        id: "ramki",
+        name: "Ramki",
+        description: "Ramki profilu do przyszlej personalizacji karty kadeta."
     },
     {
-        id: "tytuly",
-        name: "Tytuły",
-        description: "Kosmetyczne tytuły pod przyszły profil kadeta."
+        id: "personalizacja",
+        name: "Personalizacja",
+        description: "Tla i motywy profilu do przyszlej personalizacji."
     },
     {
         id: "gadzety",
@@ -21,14 +21,54 @@ const SHOP_CATEGORIES = [
     }
 ];
 
+// Te pozycje nie sa juz sprzedawane za PP. Odznaki i tytuly beda zdobywane za osiagniecia.
+const REMOVED_SHOP_ITEM_CODES = [
+    "emblemat-explorer",
+    "tytul-odkrywca",
+    "tytul-archiwista",
+    "tytul-operator-sygnalu",
+    "tytul-weteran-poligonu"
+];
+
+const FRAME_SHOP_ITEM_CODES = [
+    "ramka-carbon",
+    "ramka-neon",
+    "ramka-cyan",
+    "ramka-amber"
+];
+
 const INITIAL_SHOP_ITEMS = [
+    {
+        code: "ramka-carbon",
+        name: "Ramka Carbon",
+        description: "Matowa ramka profilu z technicznym wzorem karbonu i spokojnym kontrastem.",
+        category: "ramki",
+        price: 360,
+        rarity: "Podstawowa"
+    },
     {
         code: "ramka-neon",
         name: "Ramka Neon",
         description: "Świetlista ramka profilu inspirowana nocnymi szyldami retrofuturystycznych miast.",
-        category: "personalizacja",
+        category: "ramki",
         price: 500,
+        rarity: "Niepospolita"
+    },
+    {
+        code: "ramka-cyan",
+        name: "Ramka Cyan",
+        description: "Chlodna ramka profilu z cyfrowym akcentem i czytelnym swiatlem krawedzi.",
+        category: "ramki",
+        price: 680,
         rarity: "Rzadka"
+    },
+    {
+        code: "ramka-amber",
+        name: "Ramka Amber",
+        description: "Bursztynowa ramka profilu z cieplym obrysem i eleganckim pulsem RetroForma.",
+        category: "ramki",
+        price: 900,
+        rarity: "Epicka"
     },
     {
         code: "tlo-syntetyczny-zachod",
@@ -45,46 +85,6 @@ const INITIAL_SHOP_ITEMS = [
         category: "personalizacja",
         price: 420,
         rarity: "Niepospolita"
-    },
-    {
-        code: "emblemat-explorer",
-        name: "Emblemat Explorer",
-        description: "Znak odkrywcy dla kadetów, którzy lubią szukać własnych ścieżek.",
-        category: "personalizacja",
-        price: 360,
-        rarity: "Niepospolita"
-    },
-    {
-        code: "tytul-odkrywca",
-        name: "Odkrywca",
-        description: "Tytuł dla osób, które regularnie sprawdzają nowe zadania i pomysły.",
-        category: "tytuly",
-        price: 300,
-        rarity: "Podstawowa"
-    },
-    {
-        code: "tytul-archiwista",
-        name: "Archiwista",
-        description: "Tytuł dla tych, którzy cenią porządek, katalogi i dobrą dokumentację.",
-        category: "tytuly",
-        price: 340,
-        rarity: "Niepospolita"
-    },
-    {
-        code: "tytul-operator-sygnalu",
-        name: "Operator Sygnału",
-        description: "Tytuł dla kadetów łapiących inspirację nawet z bardzo słabego sygnału.",
-        category: "tytuly",
-        price: 460,
-        rarity: "Rzadka"
-    },
-    {
-        code: "tytul-weteran-poligonu",
-        name: "Weteran Poligonu",
-        description: "Tytuł dla stałych uczestników, którzy wracają do wyzwań z uporem i stylem.",
-        category: "tytuly",
-        price: 800,
-        rarity: "Epicka"
     },
     {
         code: "kompas-analogowy",
@@ -121,6 +121,8 @@ const INITIAL_SHOP_ITEMS = [
 ];
 
 module.exports = {
+    FRAME_SHOP_ITEM_CODES,
     INITIAL_SHOP_ITEMS,
+    REMOVED_SHOP_ITEM_CODES,
     SHOP_CATEGORIES
 };

@@ -5,7 +5,12 @@ const os = require("node:os");
 const path = require("node:path");
 const Database = require("better-sqlite3");
 
-const { INITIAL_SHOP_ITEMS } = require("../src/database/shopSeedData");
+const {
+    FRAME_SHOP_ITEM_CODES,
+    INITIAL_SHOP_ITEMS,
+    REMOVED_SHOP_ITEM_CODES,
+    SHOP_CATEGORIES
+} = require("../src/database/shopSeedData");
 const { initializeDatabase } = require("../src/database/schema");
 const {
     SHOP_PURCHASE_ERRORS,
@@ -170,6 +175,174 @@ test("seed przedmiotów sklepu jest idempotentny i nie nadpisuje danych", () => 
 
         assert.equal(finalCount, INITIAL_SHOP_ITEMS.length);
         assert.equal(changedItem.name, "Ramka Neon Test");
+    } finally {
+        close();
+    }
+});
+
+test("katalog sklepu nie zawiera wycofanych odznak ani tytulow", () => {
+    const { close, service } = createTempShopContext();
+    const member = createMember();
+
+    try {
+        const removedCodes = new Set(REMOVED_SHOP_ITEM_CODES);
+        const visibleCodes = new Set();
+        const firstView = service.getShopView(member, {
+            category: "all",
+            page: 0
+        });
+
+        for (let page = 0; page < firstView.totalPages; page += 1) {
+            const view = service.getShopView(member, {
+                category: "all",
+                page
+            });
+
+            for (const item of view.items) {
+                visibleCodes.add(item.code);
+            }
+        }
+
+        assert.equal(SHOP_CATEGORIES.some((category) => category.id === "tytuly"), false);
+        assert.equal(INITIAL_SHOP_ITEMS.some((item) => removedCodes.has(item.code)), false);
+
+        for (const removedCode of removedCodes) {
+            assert.equal(visibleCodes.has(removedCode), false);
+        }
+    } finally {
+        close();
+    }
+});
+
+test("katalog zawiera aktywna kategorie ramek bez pustych kategorii", () => {
+    const { close, service } = createTempShopContext();
+    const member = createMember();
+
+    try {
+        const categories = service.getShopView(member, {
+            category: "all",
+            page: 0
+        }).categories;
+        const categoryIds = categories.map((category) => category.id);
+
+        assert.ok(categoryIds.includes("ramki"));
+
+        for (const category of categories.filter((entry) => entry.id !== "all")) {
+            const view = service.getShopView(member, {
+                category: category.id,
+                page: 0
+            });
+
+            assert.ok(view.totalItems > 0, `Kategoria ${category.id} nie powinna byc pusta.`);
+        }
+    } finally {
+        close();
+    }
+});
+
+test("wszystkie ramki sa aktywne i maja spojna kategorie", () => {
+    const { close, db, service } = createTempShopContext();
+    const member = createMember();
+
+    try {
+        for (const frameCode of FRAME_SHOP_ITEM_CODES) {
+            const item = getItem(db, frameCode);
+
+            assert.ok(item, `Brakuje ramki ${frameCode}.`);
+            assert.equal(item.category, "ramki");
+            assert.equal(item.active, 1);
+            assert.ok(Number.isSafeInteger(Number(item.price)));
+            assert.ok(Number(item.price) >= 300);
+        }
+
+        const frameView = service.getShopView(member, {
+            category: "ramki",
+            page: 0
+        });
+
+        assert.equal(frameView.totalItems, FRAME_SHOP_ITEM_CODES.length);
+        assert.equal(frameView.totalPages, FRAME_SHOP_ITEM_CODES.length);
+    } finally {
+        close();
+    }
+});
+
+test("initializeDatabase przenosi starsza ramke neon do kategorii ramki", () => {
+    const { close, db } = createTempShopContext();
+
+    try {
+        db.prepare(`
+            UPDATE shop_items
+            SET category = ?,
+                name = ?
+            WHERE code = ?
+        `).run("personalizacja", "Ramka Neon Test", "ramka-neon");
+
+        initializeDatabase(db);
+
+        const neonFrame = getItem(db, "ramka-neon");
+
+        assert.equal(neonFrame.category, "ramki");
+        assert.equal(neonFrame.name, "Ramka Neon Test");
+    } finally {
+        close();
+    }
+});
+
+test("initializeDatabase dezaktywuje stare rekordy odznak bez usuwania inventory", () => {
+    const {
+        close,
+        db,
+        getInventoryCount,
+        getOrCreateUser,
+        service
+    } = createTempShopContext();
+    const member = createMember("legacy-shop-user");
+
+    try {
+        const user = getOrCreateUser(member);
+
+        db.prepare(`
+            INSERT INTO shop_items (
+                code,
+                name,
+                description,
+                category,
+                price,
+                rarity,
+                active,
+                created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+        `).run(
+            "emblemat-explorer",
+            "Emblemat Explorer",
+            "Stary rekord sklepu z odznaka.",
+            "personalizacja",
+            360,
+            "Niepospolita",
+            new Date().toISOString()
+        );
+
+        const oldItem = getItem(db, "emblemat-explorer");
+
+        db.prepare(`
+            INSERT INTO user_inventory (user_id, item_id, obtained_at)
+            VALUES (?, ?, ?)
+        `).run(user.id, oldItem.id, new Date().toISOString());
+
+        initializeDatabase(db);
+
+        const disabledItem = getItem(db, "emblemat-explorer");
+        const allView = service.getShopView(member, {
+            category: "all",
+            page: 0
+        });
+
+        assert.equal(disabledItem.active, 0);
+        assert.equal(getInventoryCount(user.id), 1);
+        assert.equal(findShopItemInView(service, member, "all", "emblemat-explorer"), null);
+        assert.equal(allView.categories.some((category) => category.id === "tytuly"), false);
     } finally {
         close();
     }
@@ -425,7 +598,7 @@ test("lista sklepu poprawnie oznacza posiadane przedmioty", () => {
         setUserPp(member, 1000);
         service.purchaseItem(member, "ramka-neon");
 
-        const ownedItem = findShopItemInView(service, member, "personalizacja", "ramka-neon");
+        const ownedItem = findShopItemInView(service, member, "ramki", "ramka-neon");
 
         assert.ok(ownedItem);
         assert.equal(ownedItem.owned, true);

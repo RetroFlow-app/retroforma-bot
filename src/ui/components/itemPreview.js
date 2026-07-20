@@ -32,30 +32,31 @@ function drawItemPreview(ctx, options = {}) {
     drawItemIcon(ctx, {
         accent: rarity.accent,
         item,
-        size: 240,
-        x: x + 79,
-        y: y + 58
+        imageScale: 0.8,
+        size: 300,
+        x: x + 49,
+        y: y + 52
     });
 
     if (item) {
         setFont(ctx, 24, "800");
         ctx.fillStyle = COLORS.text;
-        drawCenteredFittedText(ctx, item.name || "Przedmiot", x + width / 2, y + 326, width - 64);
+        drawCenteredFittedText(ctx, item.name || "Przedmiot", x + width / 2, y + 354, width - 56);
 
         setFont(ctx, 13, "800");
         ctx.fillStyle = owned ? COLORS.blue : rarity.accent;
-        drawCenteredFittedText(ctx, owned ? "POSIADASZ" : rarity.label.toUpperCase(), x + width / 2, y + 352, width - 92);
+        drawCenteredFittedText(ctx, owned ? "POSIADASZ" : rarity.label.toUpperCase(), x + width / 2, y + 378, width - 92);
     } else {
         setFont(ctx, 26, "800");
         ctx.fillStyle = COLORS.text;
-        drawCenteredFittedText(ctx, "BRAK OFERTY", x + width / 2, y + 326, width - 80);
+        drawCenteredFittedText(ctx, "BRAK OFERTY", x + width / 2, y + 354, width - 80);
     }
 
     drawPlayerBalance(ctx, {
         pp: playerPP,
         width: 224,
         x: x + 87,
-        y: y + 370
+        y: y + 394
     });
 }
 

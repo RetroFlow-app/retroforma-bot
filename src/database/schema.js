@@ -1,4 +1,7 @@
-const { INITIAL_SHOP_ITEMS } = require("./shopSeedData");
+const {
+    INITIAL_SHOP_ITEMS,
+    REMOVED_SHOP_ITEM_CODES
+} = require("./shopSeedData");
 
 // Sprawdza, czy tabela ma już wskazaną kolumnę.
 function hasColumn(db, tableName, columnName) {
@@ -112,6 +115,40 @@ function seedShopItems(db) {
             createdAt
         });
     }
+}
+
+// Synchronizuje tylko kategorie startowych produktow, zeby starsze bazy
+// przeniosly np. ramke neon z dawnej personalizacji do kategorii ramki.
+function syncShopItemCategories(db) {
+    const statement = db.prepare(`
+        UPDATE shop_items
+        SET category = @category
+        WHERE code = @code
+          AND category <> @category
+    `);
+
+    for (const item of INITIAL_SHOP_ITEMS) {
+        statement.run({
+            category: item.category,
+            code: item.code
+        });
+    }
+}
+
+// Wycofuje ze sklepu pozycje, ktore nie powinny byc sprzedawane za PP.
+// Nie kasuje rekordow ani inventory uzytkownikow, tylko ukrywa stare oferty.
+function disableRemovedShopItems(db) {
+    if (!REMOVED_SHOP_ITEM_CODES.length) {
+        return;
+    }
+
+    const placeholders = REMOVED_SHOP_ITEM_CODES.map(() => "?").join(", ");
+
+    db.prepare(`
+        UPDATE shop_items
+        SET active = 0
+        WHERE code IN (${placeholders})
+    `).run(...REMOVED_SHOP_ITEM_CODES);
 }
 
 function initializeDatabase(db) {
@@ -252,9 +289,13 @@ function initializeDatabase(db) {
     migrateUsersTable(db);
     migrateSubmissionsTable(db);
     seedShopItems(db);
+    syncShopItemCategories(db);
+    disableRemovedShopItems(db);
 }
 
 module.exports = {
+    disableRemovedShopItems,
     seedShopItems,
+    syncShopItemCategories,
     initializeDatabase
 };
