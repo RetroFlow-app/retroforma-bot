@@ -10,9 +10,9 @@ const SHOP_CATEGORIES = [
         description: "Ramki profilu do przyszlej personalizacji karty kadeta."
     },
     {
-        id: "personalizacja",
-        name: "Personalizacja",
-        description: "Tla i motywy profilu do przyszlej personalizacji."
+        id: "motywy-profilu",
+        name: "Motywy profilu",
+        description: "Tla i motywy profilu do przyszlej karty kadeta."
     },
     {
         id: "gadzety",
@@ -35,6 +35,15 @@ const FRAME_SHOP_ITEM_CODES = [
     "ramka-neon",
     "ramka-cyan",
     "ramka-amber"
+];
+
+const BACKGROUND_SHOP_ITEM_CODES = [
+    "motyw-crt",
+    "tlo-syntetyczny-zachod",
+    "tlo-blueprint",
+    "tlo-aurora",
+    "tlo-storm",
+    "tlo-satellite-array"
 ];
 
 const INITIAL_SHOP_ITEMS = [
@@ -74,7 +83,7 @@ const INITIAL_SHOP_ITEMS = [
         code: "tlo-syntetyczny-zachod",
         name: "Tło Syntetyczny Zachód",
         description: "Ciepłe tło profilu z cyfrowym horyzontem i klimatem spokojnej eksploracji.",
-        category: "personalizacja",
+        category: "motywy-profilu",
         price: 650,
         rarity: "Epicka"
     },
@@ -82,9 +91,41 @@ const INITIAL_SHOP_ITEMS = [
         code: "motyw-crt",
         name: "Motyw CRT",
         description: "Subtelny filtr starego monitora, przygotowany pod przyszłe warianty kart profilu.",
-        category: "personalizacja",
+        category: "motywy-profilu",
         price: 420,
         rarity: "Niepospolita"
+    },
+    {
+        code: "tlo-blueprint",
+        name: "Tło Blueprint",
+        description: "Techniczne tło profilu z rysunkiem konstrukcyjnym i chłodnym światłem CAD.",
+        category: "motywy-profilu",
+        price: 360,
+        rarity: "Podstawowa"
+    },
+    {
+        code: "tlo-aurora",
+        name: "Tło Aurora",
+        description: "Nastrojowe tło profilu z miękką poświatą i spokojnym futurystycznym kolorem.",
+        category: "motywy-profilu",
+        price: 520,
+        rarity: "Niepospolita"
+    },
+    {
+        code: "tlo-storm",
+        name: "Tło Storm",
+        description: "Ciemne tło profilu z dynamicznym światłem i energią nadciągającego frontu.",
+        category: "motywy-profilu",
+        price: 720,
+        rarity: "Rzadka"
+    },
+    {
+        code: "tlo-satellite-array",
+        name: "Tło Satellite Array",
+        description: "Profilowe tło inspirowane antenami, sygnałem i nocną pracą operatora.",
+        category: "motywy-profilu",
+        price: 900,
+        rarity: "Epicka"
     },
     {
         code: "kompas-analogowy",
@@ -121,6 +162,7 @@ const INITIAL_SHOP_ITEMS = [
 ];
 
 module.exports = {
+    BACKGROUND_SHOP_ITEM_CODES,
     FRAME_SHOP_ITEM_CODES,
     INITIAL_SHOP_ITEMS,
     REMOVED_SHOP_ITEM_CODES,

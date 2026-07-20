@@ -31,6 +31,7 @@ const {
     resolveUiAsset
 } = require("../src/ui/assetRegistry");
 const {
+    BACKGROUND_SHOP_ITEM_CODES,
     FRAME_SHOP_ITEM_CODES
 } = require("../src/database/shopSeedData");
 
@@ -485,6 +486,66 @@ test("wszystkie ramki mapuja sie do finalnych assetow PNG", () => {
         assert.equal(frameAsset.path, path.resolve(ASSET_ROOT, "frames", expectedFrameAssets[frameCode]));
         assert.ok(fs.existsSync(frameAsset.path));
         assert.equal(frameAsset.path.includes(`${path.sep}gadgets${path.sep}`), false);
+    }
+});
+
+test("wszystkie tla profilu mapuja sie do finalnych assetow PNG", () => {
+    const expectedBackgroundAssets = {
+        "motyw-crt": "crt.png",
+        "tlo-aurora": "aurora.png",
+        "tlo-blueprint": "blueprint.png",
+        "tlo-satellite-array": "satellite-array.png",
+        "tlo-storm": "storm.png",
+        "tlo-syntetyczny-zachod": "synthetic-sunset.png"
+    };
+
+    for (const backgroundCode of BACKGROUND_SHOP_ITEM_CODES) {
+        const backgroundAsset = resolveUiAsset("item", backgroundCode);
+
+        assert.equal(backgroundAsset.mapped, true);
+        assert.equal(backgroundAsset.fallback.shape, "background");
+        assert.equal(backgroundAsset.path, path.resolve(ASSET_ROOT, "backgrounds", expectedBackgroundAssets[backgroundCode]));
+        assert.ok(fs.existsSync(backgroundAsset.path));
+    }
+});
+
+test("brak assetu tla profilu nie powoduje crasha", () => {
+    const originalWarn = console.warn;
+    const originalExistsSync = fs.existsSync;
+    const warnings = [];
+    const backgroundItem = createItem({
+        code: "tlo-blueprint",
+        name: "Tlo Blueprint",
+        price: 360,
+        rarity: "Podstawowa"
+    });
+    const backgroundAsset = resolveUiAsset("item", backgroundItem.code);
+
+    clearAssetCache();
+    console.warn = (message) => warnings.push(message);
+    fs.existsSync = (filePath) => {
+        if (path.resolve(filePath) === backgroundAsset.path) {
+            return false;
+        }
+
+        return originalExistsSync.call(fs, filePath);
+    };
+
+    try {
+        assertPngBuffer(renderShopScreen({
+            catalogItems: [backgroundItem],
+            item: backgroundItem,
+            page: 1,
+            playerPP: 1000,
+            totalItems: 1,
+            totalPages: 1
+        }));
+
+        assert.ok(warnings.some((warning) => /tlo-blueprint/.test(warning)));
+    } finally {
+        console.warn = originalWarn;
+        fs.existsSync = originalExistsSync;
+        clearAssetCache();
     }
 });
 

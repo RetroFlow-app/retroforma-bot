@@ -1,8 +1,10 @@
 const config = require("../config/appConfig");
 const adminPanel = require("../commands/adminCommands");
+const inventoryCommand = require("../commands/inventoryCommand");
 const pointsCommand = require("../commands/pointsCommand");
 const profileCommand = require("../commands/profileCommand");
 const shopCommand = require("../commands/shopCommand");
+const { handleInventoryInteraction } = require("./inventoryInteractionHandler");
 const { handleShopInteraction } = require("./shopInteractionHandler");
 const {
     createRejectReviewModal,
@@ -21,6 +23,7 @@ const {
 const commands = [
     profileCommand,
     pointsCommand,
+    inventoryCommand,
     shopCommand,
     ...adminPanel.commands
 ];
@@ -247,6 +250,10 @@ function registerCommandHandler(client) {
             }
 
             if (await adminPanel.handleAdminButton(interaction)) {
+                return;
+            }
+
+            if (await handleInventoryInteraction(interaction)) {
                 return;
             }
 

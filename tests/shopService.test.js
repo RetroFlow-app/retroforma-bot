@@ -6,6 +6,7 @@ const path = require("node:path");
 const Database = require("better-sqlite3");
 
 const {
+    BACKGROUND_SHOP_ITEM_CODES,
     FRAME_SHOP_ITEM_CODES,
     INITIAL_SHOP_ITEMS,
     REMOVED_SHOP_ITEM_CODES,
@@ -226,6 +227,7 @@ test("katalog zawiera aktywna kategorie ramek bez pustych kategorii", () => {
         const categoryIds = categories.map((category) => category.id);
 
         assert.ok(categoryIds.includes("ramki"));
+        assert.ok(categoryIds.includes("motywy-profilu"));
 
         for (const category of categories.filter((entry) => entry.id !== "all")) {
             const view = service.getShopView(member, {
@@ -235,6 +237,33 @@ test("katalog zawiera aktywna kategorie ramek bez pustych kategorii", () => {
 
             assert.ok(view.totalItems > 0, `Kategoria ${category.id} nie powinna byc pusta.`);
         }
+    } finally {
+        close();
+    }
+});
+
+test("wszystkie tla profilu sa aktywne w kategorii motywy profilu", () => {
+    const { close, db, service } = createTempShopContext();
+    const member = createMember();
+
+    try {
+        for (const backgroundCode of BACKGROUND_SHOP_ITEM_CODES) {
+            const item = getItem(db, backgroundCode);
+
+            assert.ok(item, `Brakuje tla ${backgroundCode}.`);
+            assert.equal(item.category, "motywy-profilu");
+            assert.equal(item.active, 1);
+            assert.ok(Number.isSafeInteger(Number(item.price)));
+            assert.ok(Number(item.price) > 0);
+        }
+
+        const backgroundView = service.getShopView(member, {
+            category: "motywy-profilu",
+            page: 0
+        });
+
+        assert.equal(backgroundView.totalItems, BACKGROUND_SHOP_ITEM_CODES.length);
+        assert.equal(backgroundView.totalPages, BACKGROUND_SHOP_ITEM_CODES.length);
     } finally {
         close();
     }
@@ -284,6 +313,25 @@ test("initializeDatabase przenosi starsza ramke neon do kategorii ramki", () => 
 
         assert.equal(neonFrame.category, "ramki");
         assert.equal(neonFrame.name, "Ramka Neon Test");
+    } finally {
+        close();
+    }
+});
+
+test("initializeDatabase przenosi starsze tla do kategorii motywy profilu", () => {
+    const { close, db } = createTempShopContext();
+
+    try {
+        db.prepare(`
+            UPDATE shop_items
+            SET category = ?
+            WHERE code IN (?, ?)
+        `).run("personalizacja", "motyw-crt", "tlo-syntetyczny-zachod");
+
+        initializeDatabase(db);
+
+        assert.equal(getItem(db, "motyw-crt").category, "motywy-profilu");
+        assert.equal(getItem(db, "tlo-syntetyczny-zachod").category, "motywy-profilu");
     } finally {
         close();
     }

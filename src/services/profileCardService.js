@@ -8,6 +8,11 @@ const {
     loadProfileAssets,
     registerProfileFont
 } = require("./profileAssetService");
+const {
+    resolveProfileFrameAsset,
+    resolveProfileThemeAsset
+} = require("./profileEquipmentService");
+const { loadUiAssetImage } = require("../ui/assetRegistry");
 
 // Ładuje canvas dopiero przy generowaniu karty, żeby brak biblioteki nie psuł startu bota.
 function loadCanvas() {
@@ -20,6 +25,16 @@ function loadCanvas() {
     }
 }
 
+function loadProfileEquipmentAssets(profile) {
+    const themeAsset = resolveProfileThemeAsset(profile.equipment);
+    const frameAsset = resolveProfileFrameAsset(profile.equipment);
+
+    return {
+        equippedProfileFrame: frameAsset ? loadUiAssetImage("item", frameAsset.id) : null,
+        equippedProfileTheme: themeAsset ? loadUiAssetImage("item", themeAsset.id) : null
+    };
+}
+
 // Ładuje canvas, assety i opcjonalne ikony odznak.
 async function loadCanvasContext(profile) {
     const canvasApi = loadCanvas();
@@ -29,7 +44,10 @@ async function loadCanvasContext(profile) {
 
     return {
         ...canvasApi,
-        assets: await loadProfileAssets(canvasApi.loadImage),
+        assets: {
+            ...await loadProfileAssets(canvasApi.loadImage),
+            ...loadProfileEquipmentAssets(profile)
+        },
         badgeIcons: await loadBadgeIconAssets(canvasApi.loadImage, profile.badges || [])
     };
 }
@@ -151,9 +169,60 @@ function drawGlow(ctx, x, y, radius, color) {
     ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
 }
 
-// Rysuje tło AAA: asset, a bez niego techniczny gradient z siatką CAD.
+function drawImageCover(ctx, image, x, y, width, height) {
+    const imageWidth = image.width || width;
+    const imageHeight = image.height || height;
+    const scale = Math.max(width / imageWidth, height / imageHeight);
+    const drawWidth = imageWidth * scale;
+    const drawHeight = imageHeight * scale;
+    const drawX = x + (width - drawWidth) / 2;
+    const drawY = y + (height - drawHeight) / 2;
+
+    ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+}
+
+function drawImageContain(ctx, image, x, y, width, height) {
+    const imageWidth = image.width || width;
+    const imageHeight = image.height || height;
+    const scale = Math.min(width / imageWidth, height / imageHeight);
+    const drawWidth = imageWidth * scale;
+    const drawHeight = imageHeight * scale;
+    const drawX = x + (width - drawWidth) / 2;
+    const drawY = y + (height - drawHeight) / 2;
+
+    ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+}
+
+function drawProfileThemeOverlay(ctx) {
+    const overlay = ctx.createLinearGradient(0, 0, CARD_WIDTH, CARD_HEIGHT);
+
+    overlay.addColorStop(0, "rgba(2, 6, 23, 0.62)");
+    overlay.addColorStop(0.42, "rgba(2, 6, 23, 0.34)");
+    overlay.addColorStop(1, "rgba(2, 6, 23, 0.72)");
+    ctx.fillStyle = overlay;
+    ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
+
+    const vignette = ctx.createRadialGradient(
+        CARD_WIDTH / 2,
+        CARD_HEIGHT / 2,
+        120,
+        CARD_WIDTH / 2,
+        CARD_HEIGHT / 2,
+        650
+    );
+
+    vignette.addColorStop(0, "rgba(0, 0, 0, 0)");
+    vignette.addColorStop(1, "rgba(0, 0, 0, 0.46)");
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
+}
+
+// Rysuje tło AAA: aktywny motyw profilu, asset domyślny albo techniczny gradient.
 function drawBackground(ctx, assets) {
-    if (assets.background) {
+    if (assets.equippedProfileTheme) {
+        drawImageCover(ctx, assets.equippedProfileTheme, 0, 0, CARD_WIDTH, CARD_HEIGHT);
+        drawProfileThemeOverlay(ctx);
+    } else if (assets.background) {
         ctx.drawImage(assets.background, 0, 0, CARD_WIDTH, CARD_HEIGHT);
     } else {
         const gradient = ctx.createLinearGradient(0, 0, CARD_WIDTH, CARD_HEIGHT);
@@ -267,7 +336,9 @@ function drawAvatar(ctx, profile, avatarImage, assets) {
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    if (assets.avatarFrame) {
+    if (assets.equippedProfileFrame) {
+        drawImageContain(ctx, assets.equippedProfileFrame, centerX - 116, centerY - 116, 232, 232);
+    } else if (assets.avatarFrame) {
         ctx.drawImage(assets.avatarFrame, centerX - 106, centerY - 106, 212, 212);
     }
 }
@@ -586,5 +657,7 @@ async function createProfileCard(profile, options = {}) {
 
 module.exports = {
     createProfileCard,
+    drawImageCover,
+    drawImageContain,
     getProgressAnimationFrames
 };
