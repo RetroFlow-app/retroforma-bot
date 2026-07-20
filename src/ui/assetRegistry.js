@@ -14,10 +14,25 @@ function createAsset(relativeParts, fallback) {
     };
 }
 
-const ITEM_ASSETS = {
-    "ramka-neon": createAsset(["items", "ramka-neon.svg"], {
+function createFrameAsset(fileName, fallback) {
+    return createAsset(["frames", `${fileName}.png`], {
         shape: "frame",
+        ...fallback
+    });
+}
+
+const ITEM_ASSETS = {
+    "ramka-carbon": createFrameAsset("carbon", {
+        symbol: "RC"
+    }),
+    "ramka-neon": createFrameAsset("neon", {
         symbol: "RF"
+    }),
+    "ramka-cyan": createFrameAsset("cyan", {
+        symbol: "CY"
+    }),
+    "ramka-amber": createFrameAsset("amber", {
+        symbol: "AM"
     }),
 
     compass: createAsset(["gadgets", "compass.png"], {
@@ -42,7 +57,11 @@ const ITEM_ASSETS = {
         shape: "archive",
         symbol: "BP"
     }),
-    "aparat-polaroid": createAsset([], {
+    aparat: createAsset(["gadgets", "aparat.png"], {
+        shape: "camera",
+        symbol: "AP"
+    }),
+    "aparat-polaroid": createAsset(["gadgets", "aparat.png"], {
         shape: "camera",
         symbol: "AP"
     }),
