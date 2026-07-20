@@ -267,6 +267,17 @@ function initializeDatabase(db) {
             UNIQUE(user_id, item_id)
         );
 
+        -- user_id przechowuje wewnętrzne users.id z SQLite.
+        -- Slot oddziela aktywny motyw profilu od aktywnej ramki profilu.
+        CREATE TABLE IF NOT EXISTS user_equipment (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            slot TEXT NOT NULL,
+            item_id INTEGER NOT NULL,
+            updated_at TEXT,
+            UNIQUE(user_id, slot)
+        );
+
         CREATE INDEX IF NOT EXISTS idx_arsenal_items_category
             ON arsenal_items (category_id);
 
@@ -284,6 +295,9 @@ function initializeDatabase(db) {
 
         CREATE INDEX IF NOT EXISTS idx_user_inventory_item_id
             ON user_inventory (item_id);
+
+        CREATE INDEX IF NOT EXISTS idx_user_equipment_user_id
+            ON user_equipment (user_id);
     `);
 
     migrateUsersTable(db);

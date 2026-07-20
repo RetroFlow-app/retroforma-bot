@@ -7,6 +7,7 @@ const {
     evaluateBadgesForUser,
     getUserBadges
 } = require("./badgeService");
+const { getProfileEquipment } = require("./profileEquipmentService");
 const { getRank } = require("./rankService");
 
 // Wylicza pozycję w rankingu na podstawie liczby PP.
@@ -52,6 +53,7 @@ function getProfileData(member) {
         streak: currentStreak,
         rankingPosition: getUserRankingPosition(pp),
         badges: getUserBadges(user.discord_id, 6),
+        equipment: getProfileEquipment(db, user.id),
         progress: getCurrentLevelProgress(xp)
     };
 }

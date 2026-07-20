@@ -277,10 +277,10 @@ function drawFallbackShape(ctx, shape, centerX, centerY, size, accent, itemCode 
     ctx.restore();
 }
 
-function drawCenteredAssetImage(ctx, image, centerX, centerY, maxSize) {
-    const imageWidth = Number(image.width) || maxSize;
-    const imageHeight = Number(image.height) || maxSize;
-    const scale = Math.min(maxSize / imageWidth, maxSize / imageHeight);
+function drawContainedAssetImage(ctx, image, centerX, centerY, maxWidth, maxHeight) {
+    const imageWidth = Number(image.width) || maxWidth;
+    const imageHeight = Number(image.height) || maxHeight;
+    const scale = Math.min(maxWidth / imageWidth, maxHeight / imageHeight);
     const drawWidth = imageWidth * scale;
     const drawHeight = imageHeight * scale;
 
@@ -291,6 +291,10 @@ function drawCenteredAssetImage(ctx, image, centerX, centerY, maxSize) {
         drawWidth,
         drawHeight
     );
+}
+
+function drawCenteredAssetImage(ctx, image, centerX, centerY, maxSize) {
+    drawContainedAssetImage(ctx, image, centerX, centerY, maxSize, maxSize);
 }
 
 function drawItemIcon(ctx, options = {}) {
@@ -314,35 +318,40 @@ function drawItemIcon(ctx, options = {}) {
     if (showBackdrop) {
         ctx.shadowColor = `${accent}44`;
         ctx.shadowBlur = size > 120 ? 20 : 8;
-        fillRoundedRect(ctx, x, y, size, size, Math.max(14, size * 0.11), "rgba(5, 13, 12, 0.76)");
+        const radius = Math.max(14, size * 0.11);
+        const backdropGradient = ctx.createLinearGradient(x, y, x + size, y + size);
+
+        backdropGradient.addColorStop(0, "rgba(3, 8, 8, 0.94)");
+        backdropGradient.addColorStop(0.5, "rgba(7, 17, 15, 0.84)");
+        backdropGradient.addColorStop(1, "rgba(2, 5, 6, 0.96)");
+
+        fillRoundedRect(ctx, x, y, size, size, radius, backdropGradient);
         ctx.shadowBlur = 0;
-        strokeRoundedRect(ctx, x, y, size, size, Math.max(14, size * 0.11), `${accent}52`, 1.2);
+        strokeRoundedRect(ctx, x, y, size, size, radius, `${accent}52`, 1.2);
 
-        ctx.save();
-        ctx.globalAlpha = 0.16;
-        ctx.strokeStyle = accent;
-        ctx.lineWidth = 1;
-
-        for (let lineX = x + 18; lineX < x + size - 18; lineX += Math.max(18, size * 0.13)) {
-            ctx.beginPath();
-            ctx.moveTo(lineX, y + 18);
-            ctx.lineTo(lineX, y + size - 18);
-            ctx.stroke();
-        }
-
-        for (let lineY = y + 18; lineY < y + size - 18; lineY += Math.max(18, size * 0.13)) {
-            ctx.beginPath();
-            ctx.moveTo(x + 18, lineY);
-            ctx.lineTo(x + size - 18, lineY);
-            ctx.stroke();
-        }
-        ctx.restore();
-
-        const glow = ctx.createRadialGradient(centerX, centerY, size * 0.08, centerX, centerY, size * 0.48);
-        glow.addColorStop(0, `${accent}2f`);
+        const glow = ctx.createRadialGradient(centerX, centerY, size * 0.08, centerX, centerY, size * 0.54);
+        glow.addColorStop(0, `${accent}30`);
+        glow.addColorStop(0.48, `${accent}12`);
         glow.addColorStop(1, "rgba(0, 0, 0, 0)");
         ctx.fillStyle = glow;
         ctx.fillRect(x, y, size, size);
+
+        const vignette = ctx.createRadialGradient(centerX, centerY, size * 0.42, centerX, centerY, size * 0.72);
+        vignette.addColorStop(0, "rgba(0, 0, 0, 0)");
+        vignette.addColorStop(1, "rgba(0, 0, 0, 0.58)");
+        ctx.fillStyle = vignette;
+        ctx.fillRect(x, y, size, size);
+
+        ctx.save();
+        ctx.globalAlpha = 0.045;
+        ctx.fillStyle = accent;
+        for (let dotIndex = 0; dotIndex < 18; dotIndex += 1) {
+            const dotX = x + ((dotIndex * 37) % Math.max(1, size - 30)) + 15;
+            const dotY = y + ((dotIndex * 53) % Math.max(1, size - 30)) + 15;
+
+            ctx.fillRect(dotX, dotY, 1, 1);
+        }
+        ctx.restore();
     }
 
     let drewImage = false;
@@ -351,7 +360,11 @@ function drawItemIcon(ctx, options = {}) {
         const imageMaxSize = size * imageScale;
 
         try {
-            drawCenteredAssetImage(ctx, image, centerX, centerY, imageMaxSize);
+            if (visual.shape === "background") {
+                drawContainedAssetImage(ctx, image, centerX, centerY, size * 0.9, size * 0.64);
+            } else {
+                drawCenteredAssetImage(ctx, image, centerX, centerY, imageMaxSize);
+            }
             drewImage = true;
         } catch (error) {
             console.warn(`[UI ASSET] Nie udalo sie narysowac assetu item:${item?.code || "unknown"} (${error.message})`);

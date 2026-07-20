@@ -21,6 +21,13 @@ function createFrameAsset(fileName, fallback) {
     });
 }
 
+function createBackgroundAsset(fileName, fallback) {
+    return createAsset(["backgrounds", fileName], {
+        shape: "background",
+        ...fallback
+    });
+}
+
 const ITEM_ASSETS = {
     "ramka-carbon": createFrameAsset("carbon", {
         symbol: "RC"
@@ -75,14 +82,25 @@ const ITEM_ASSETS = {
         symbol: "TP"
     }),
 
-    "tlo-syntetyczny-zachod": createAsset([], {
-        shape: "horizon",
-        symbol: "TZ"
-    }),
-    "motyw-crt": createAsset([], {
-        shape: "screen",
+    "motyw-crt": createBackgroundAsset("crt.png", {
         symbol: "CRT"
     }),
+    "tlo-syntetyczny-zachod": createBackgroundAsset("synthetic-sunset.png", {
+        symbol: "TZ"
+    }),
+    "tlo-blueprint": createBackgroundAsset("blueprint.png", {
+        symbol: "BP"
+    }),
+    "tlo-aurora": createBackgroundAsset("aurora.png", {
+        symbol: "AU"
+    }),
+    "tlo-storm": createBackgroundAsset("storm.png", {
+        symbol: "ST"
+    }),
+    "tlo-satellite-array": createBackgroundAsset("satellite-array.png", {
+        symbol: "SA"
+    }),
+
     "emblemat-explorer": createAsset([], {
         shape: "compass",
         symbol: "EX"
