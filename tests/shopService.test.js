@@ -337,6 +337,52 @@ test("initializeDatabase przenosi starsze tla do kategorii motywy profilu", () =
     }
 });
 
+test("initializeDatabase przenosi starszy terminal bez naruszania inventory", () => {
+    const {
+        close,
+        db,
+        getOrCreateUser
+    } = createTempShopContext();
+    const member = createMember("legacy-terminal-owner");
+
+    try {
+        const user = getOrCreateUser(member);
+        const terminal = getItem(db, "terminal");
+
+        db.prepare(`
+            UPDATE shop_items
+            SET code = ?,
+                name = ?
+            WHERE id = ?
+        `).run("terminal-przenosny", "Terminal Przenosny", terminal.id);
+
+        db.prepare(`
+            INSERT INTO user_inventory (user_id, item_id, obtained_at)
+            VALUES (?, ?, ?)
+        `).run(user.id, terminal.id, new Date().toISOString());
+
+        initializeDatabase(db);
+
+        const migratedTerminal = getItem(db, "terminal");
+        const legacyTerminal = getItem(db, "terminal-przenosny");
+        const inventoryRow = db.prepare(`
+            SELECT item_id
+            FROM user_inventory
+            WHERE user_id = ?
+        `).get(user.id);
+
+        assert.equal(migratedTerminal.id, terminal.id);
+        assert.equal(migratedTerminal.name, "Terminal Polowy");
+        assert.equal(migratedTerminal.description, terminal.description);
+        assert.equal(migratedTerminal.price, terminal.price);
+        assert.equal(migratedTerminal.rarity, terminal.rarity);
+        assert.equal(legacyTerminal, undefined);
+        assert.equal(inventoryRow.item_id, terminal.id);
+    } finally {
+        close();
+    }
+});
+
 test("initializeDatabase dezaktywuje stare rekordy odznak bez usuwania inventory", () => {
     const {
         close,

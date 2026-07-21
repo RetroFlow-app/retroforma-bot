@@ -152,8 +152,8 @@ const INITIAL_SHOP_ITEMS = [
         rarity: "Rzadka"
     },
     {
-        code: "terminal-przenosny",
-        name: "Terminal Przenośny",
+        code: "terminal",
+        name: "Terminal Polowy",
         description: "Kieszonkowy terminal do przyszłych wypraw, notatek i sygnałów z Poligonu.",
         category: "gadzety",
         price: 700,

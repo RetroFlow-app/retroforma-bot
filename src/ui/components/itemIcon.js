@@ -15,11 +15,21 @@ function clearItemAssetCache() {
     clearAssetCache();
 }
 
-function resolveItemVisual(item = {}) {
-    const asset = resolveUiAsset("item", item.code || item.name);
+function getAssetTypeForItem(item = {}, assetType = "item") {
+    if (assetType) {
+        return assetType;
+    }
+
+    return item.type === "badge" ? "badge" : "item";
+}
+
+function resolveItemVisual(item = {}, assetType = "item") {
+    const type = getAssetTypeForItem(item, assetType);
+    const asset = resolveUiAsset(type, item.code || item.name);
 
     return {
         assetPath: asset.path,
+        assetType: type,
         mapped: asset.mapped,
         shape: asset.fallback.shape || "generic",
         symbol: asset.fallback.symbol || "RF"
@@ -300,6 +310,7 @@ function drawCenteredAssetImage(ctx, image, centerX, centerY, maxSize) {
 function drawItemIcon(ctx, options = {}) {
     const {
         accent = COLORS.green,
+        assetType = null,
         item = null,
         imageScale = 0.64,
         showBackdrop = true,
@@ -309,9 +320,10 @@ function drawItemIcon(ctx, options = {}) {
     } = options;
     const centerX = x + size / 2;
     const centerY = y + size / 2;
-    const visual = resolveItemVisual(item || {});
+    const resolvedAssetType = getAssetTypeForItem(item || {}, assetType);
+    const visual = resolveItemVisual(item || {}, resolvedAssetType);
     const assetId = item?.code || item?.name || null;
-    const image = assetId ? loadUiAssetImage("item", assetId) : null;
+    const image = assetId ? loadUiAssetImage(resolvedAssetType, assetId) : null;
 
     ctx.save();
 

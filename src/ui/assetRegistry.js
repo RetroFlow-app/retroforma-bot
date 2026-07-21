@@ -73,13 +73,17 @@ const ITEM_ASSETS = {
         symbol: "AP"
     }),
 
+    terminal: createAsset(["gadgets", "terminal.png"], {
+        shape: "screen",
+        symbol: "TP"
+    }),
+    "terminal-przenosny": createAsset(["gadgets", "terminal.png"], {
+        shape: "screen",
+        symbol: "TP"
+    }),
     smartwatch: createAsset(["gadgets", "smartwatch.png"], {
         shape: "screen",
         symbol: "SW"
-    }),
-    "terminal-przenosny": createAsset([], {
-        shape: "screen",
-        symbol: "TP"
     }),
 
     "motyw-crt": createBackgroundAsset("crt.png", {

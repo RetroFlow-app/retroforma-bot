@@ -444,6 +444,8 @@ test("registry mapuje aktualne identyfikatory itemow na finalne assety", () => {
         ["backpack", ["gadgets", "backpack.png"]],
         ["aparat", ["gadgets", "aparat.png"]],
         ["aparat-polaroid", ["gadgets", "aparat.png"]],
+        ["terminal", ["gadgets", "terminal.png"]],
+        ["terminal-przenosny", ["gadgets", "terminal.png"]],
         ["smartwatch", ["gadgets", "smartwatch.png"]]
     ];
 
@@ -455,9 +457,9 @@ test("registry mapuje aktualne identyfikatory itemow na finalne assety", () => {
     }
 });
 
-test("aparat uzywa wlasnego assetu, a terminal pozostaje na fallbacku", () => {
+test("aparat i terminal uzywaja wlasnych assetow", () => {
     const cameraAsset = resolveUiAsset("item", "aparat-polaroid");
-    const terminalAsset = resolveUiAsset("item", "terminal-przenosny");
+    const terminalAsset = resolveUiAsset("item", "terminal");
 
     assert.equal(cameraAsset.mapped, true);
     assert.equal(cameraAsset.path, path.resolve(ASSET_ROOT, "gadgets", "aparat.png"));
@@ -465,7 +467,7 @@ test("aparat uzywa wlasnego assetu, a terminal pozostaje na fallbacku", () => {
     assert.notEqual(cameraAsset.path, path.resolve(ASSET_ROOT, "gadgets", "backpack.png"));
 
     assert.equal(terminalAsset.mapped, true);
-    assert.equal(terminalAsset.path, null);
+    assert.equal(terminalAsset.path, path.resolve(ASSET_ROOT, "gadgets", "terminal.png"));
     assert.equal(terminalAsset.fallback.shape, "screen");
     assert.notEqual(terminalAsset.path, path.resolve(ASSET_ROOT, "gadgets", "smartwatch.png"));
 });

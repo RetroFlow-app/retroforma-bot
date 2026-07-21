@@ -1,36 +1,14 @@
 const {
-    createInventoryPayload
-} = require("../commands/inventoryCommand");
+    createInventoryPayload,
+    parseInventoryCustomId
+} = require("../services/inventoryViewService");
 const {
     EQUIPMENT_ERRORS,
-    equipInventoryItem,
-    getInventoryView
+    equipInventoryItem
 } = require("../services/inventoryService");
-
-const INVENTORY_CUSTOM_ID_PREFIX = "inventory";
 
 function getInteractionMember(interaction) {
     return interaction.member || interaction.user;
-}
-
-function parseInventoryCustomId(customId) {
-    const parts = String(customId || "").split(":");
-
-    if (parts.length !== 4) {
-        return null;
-    }
-
-    const [prefix, action, userId, slot] = parts;
-
-    if (prefix !== INVENTORY_CUSTOM_ID_PREFIX || action !== "equip") {
-        return null;
-    }
-
-    return {
-        action,
-        slot,
-        userId
-    };
 }
 
 async function replyWrongUser(interaction) {
@@ -52,8 +30,55 @@ function getEquipmentErrorMessage(error) {
     return "Nie udało się wyposażyć przedmiotu.";
 }
 
-async function handleInventoryInteraction(interaction, options = {}) {
-    if (!interaction.isStringSelectMenu()) {
+async function handleCategorySelect(interaction) {
+    const selectedCategory = interaction.values[0] || "all";
+
+    await interaction.update(
+        createInventoryPayload(getInteractionMember(interaction), {
+            category: selectedCategory,
+            page: 0
+        })
+    );
+}
+
+async function handlePageButton(interaction, inventoryInteraction) {
+    await interaction.update(
+        createInventoryPayload(getInteractionMember(interaction), {
+            category: inventoryInteraction.category,
+            page: inventoryInteraction.page
+        })
+    );
+}
+
+async function handleEquipSelect(interaction, inventoryInteraction) {
+    const itemCode = interaction.values[0];
+
+    try {
+        equipInventoryItem(getInteractionMember(interaction), itemCode, {
+            expectedSlot: inventoryInteraction.slot
+        });
+    } catch (error) {
+        if (!error.code || !Object.values(EQUIPMENT_ERRORS).includes(error.code)) {
+            console.error(`Błąd wyposażania ekwipunku: ${error.message}`);
+        }
+
+        await interaction.reply({
+            content: getEquipmentErrorMessage(error),
+            ephemeral: true
+        });
+        return;
+    }
+
+    await interaction.update(
+        createInventoryPayload(getInteractionMember(interaction), {
+            category: inventoryInteraction.category,
+            page: inventoryInteraction.page
+        })
+    );
+}
+
+async function handleInventoryInteraction(interaction) {
+    if (!interaction.isButton() && !interaction.isStringSelectMenu()) {
         return false;
     }
 
@@ -68,35 +93,24 @@ async function handleInventoryInteraction(interaction, options = {}) {
         return true;
     }
 
-    const itemCode = interaction.values[0];
-
-    try {
-        equipInventoryItem(getInteractionMember(interaction), itemCode, {
-            ...options,
-            expectedSlot: inventoryInteraction.slot
-        });
-    } catch (error) {
-        if (!error.code || !Object.values(EQUIPMENT_ERRORS).includes(error.code)) {
-            console.error(`Błąd wyposażania ekwipunku: ${error.message}`);
-        }
-
-        await interaction.reply({
-            content: getEquipmentErrorMessage(error),
-            ephemeral: true
-        });
+    if (inventoryInteraction.action === "category" && interaction.isStringSelectMenu()) {
+        await handleCategorySelect(interaction);
         return true;
     }
 
-    const inventoryView = getInventoryView(getInteractionMember(interaction), options);
+    if (inventoryInteraction.action === "page" && interaction.isButton()) {
+        await handlePageButton(interaction, inventoryInteraction);
+        return true;
+    }
 
-    await interaction.update(
-        createInventoryPayload(inventoryView)
-    );
+    if (inventoryInteraction.action === "equip" && interaction.isStringSelectMenu()) {
+        await handleEquipSelect(interaction, inventoryInteraction);
+        return true;
+    }
 
-    return true;
+    return false;
 }
 
 module.exports = {
-    handleInventoryInteraction,
-    parseInventoryCustomId
+    handleInventoryInteraction
 };
