@@ -151,6 +151,31 @@ function disableRemovedShopItems(db) {
     `).run(...REMOVED_SHOP_ITEM_CODES);
 }
 
+// Porzadkuje starszy kod terminala bez zmiany ceny, rzadkosci, opisu ani inventory.
+function syncTerminalShopItemCode(db) {
+    const legacyTerminal = db.prepare(`
+        SELECT id
+        FROM shop_items
+        WHERE code = ?
+    `).get("terminal-przenosny");
+    const currentTerminal = db.prepare(`
+        SELECT id
+        FROM shop_items
+        WHERE code = ?
+    `).get("terminal");
+
+    if (!legacyTerminal || currentTerminal) {
+        return;
+    }
+
+    db.prepare(`
+        UPDATE shop_items
+        SET code = ?,
+            name = ?
+        WHERE id = ?
+    `).run("terminal", "Terminal Polowy", legacyTerminal.id);
+}
+
 function initializeDatabase(db) {
     db.exec(`
         CREATE TABLE IF NOT EXISTS users (
@@ -302,6 +327,7 @@ function initializeDatabase(db) {
 
     migrateUsersTable(db);
     migrateSubmissionsTable(db);
+    syncTerminalShopItemCode(db);
     seedShopItems(db);
     syncShopItemCategories(db);
     disableRemovedShopItems(db);
@@ -311,5 +337,6 @@ module.exports = {
     disableRemovedShopItems,
     seedShopItems,
     syncShopItemCategories,
+    syncTerminalShopItemCode,
     initializeDatabase
 };

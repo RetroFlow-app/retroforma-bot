@@ -7,12 +7,42 @@ const Database = require("better-sqlite3");
 
 const inventoryCommand = require("../src/commands/inventoryCommand");
 const {
-    EMPTY_INVENTORY_SECTION_TEXT,
     EQUIPMENT_ERRORS,
     EQUIPMENT_SLOTS,
     createInventoryService
 } = require("../src/services/inventoryService");
+const {
+    createInventoryPayload,
+    createInventoryViewModel
+} = require("../src/services/inventoryViewService");
 const { initializeDatabase } = require("../src/database/schema");
+const {
+    ASSET_ROOT,
+    resolveUiAsset
+} = require("../src/ui/assetRegistry");
+const {
+    normalizeInventoryScreenData,
+    renderInventoryScreen
+} = require("../src/ui/templates/inventoryScreen");
+
+const PNG_SIGNATURE = "89504e470d0a1a0a";
+
+function readPngSize(buffer) {
+    return {
+        height: buffer.readUInt32BE(20),
+        width: buffer.readUInt32BE(16)
+    };
+}
+
+function assertPngBuffer(buffer) {
+    assert.ok(Buffer.isBuffer(buffer));
+    assert.ok(buffer.length > 1000);
+    assert.equal(buffer.subarray(0, 8).toString("hex"), PNG_SIGNATURE);
+    assert.deepEqual(readPngSize(buffer), {
+        height: 720,
+        width: 1280
+    });
+}
 
 function createTempInventoryContext() {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "retroforma-inventory-"));
@@ -131,10 +161,6 @@ function getSection(view, sectionId) {
     return view.sections.find((section) => section.id === sectionId);
 }
 
-function getEmbedField(embedJson, fieldLabel) {
-    return embedJson.fields.find((field) => field.name.includes(fieldLabel));
-}
-
 test("komenda /ekwipunek jest zarejestrowana jako przeglad kolekcji", () => {
     const commandJson = inventoryCommand.data.toJSON();
 
@@ -174,7 +200,7 @@ test("/ekwipunek wyswietla odznaki z istniejacego systemu badges", () => {
     try {
         context.getOrCreateUser(member);
         context.addBadge(member, {
-            id: "first-mission",
+            id: "first_mission",
             name: "Pierwsza Misja",
             description: "Ukończono pierwszą misję Poligonu."
         });
@@ -186,14 +212,14 @@ test("/ekwipunek wyswietla odznaki z istniejacego systemu badges", () => {
         const badges = getSection(view, "odznaki").items;
 
         assert.equal(badges.length, 1);
-        assert.equal(badges[0].code, "first-mission");
+        assert.equal(badges[0].code, "first_mission");
         assert.equal(badges[0].name, "Pierwsza Misja");
     } finally {
         context.close();
     }
 });
 
-test("/ekwipunek odpowiada ephemeral embedem i pokazuje puste sekcje", async () => {
+test("/ekwipunek odpowiada ephemeral ekranem PNG bez tekstowego embeda", async () => {
     const context = createTempInventoryContext();
     const member = createMember("empty-inventory-1");
     let replyPayload = null;
@@ -210,15 +236,13 @@ test("/ekwipunek odpowiada ephemeral embedem i pokazuje puste sekcje", async () 
             getOrCreateUser: context.getOrCreateUser
         });
 
-        const embedJson = replyPayload.embeds[0].toJSON();
-
         assert.equal(replyPayload.ephemeral, true);
-        assert.equal(replyPayload.embeds.length, 1);
-        assert.match(embedJson.title, /Ekwipunek/);
-        assert.equal(getEmbedField(embedJson, "Posiadane").value, "0");
-        assert.equal(getEmbedField(embedJson, "Ramki").value, EMPTY_INVENTORY_SECTION_TEXT);
-        assert.equal(getEmbedField(embedJson, "Gadżety").value, EMPTY_INVENTORY_SECTION_TEXT);
-        assert.equal(getEmbedField(embedJson, "Odznaki").value, EMPTY_INVENTORY_SECTION_TEXT);
+        assert.deepEqual(replyPayload.embeds, []);
+        assert.deepEqual(replyPayload.attachments, []);
+        assert.equal(replyPayload.files.length, 1);
+        assert.equal(replyPayload.files[0].name, "retroforma-ekwipunek.png");
+        assertPngBuffer(replyPayload.files[0].attachment);
+        assert.ok(replyPayload.components.length >= 2);
     } finally {
         context.close();
     }
@@ -359,4 +383,80 @@ test("/ekwipunek nie pozwala wyposazyc nieposiadanego przedmiotu", () => {
     } finally {
         context.close();
     }
+});
+
+test("graficzny ekwipunek renderuje karty i paginuje kolekcje", () => {
+    const context = createTempInventoryContext();
+    const member = createMember("inventory-render-1");
+
+    try {
+        [
+            "tlo-blueprint",
+            "tlo-aurora",
+            "tlo-storm",
+            "tlo-satellite-array",
+            "motyw-crt",
+            "tlo-syntetyczny-zachod",
+            "ramka-neon",
+            "ramka-carbon",
+            "kompas-analogowy"
+        ].forEach((code) => context.addOwnedShopItem(member, code));
+
+        const viewModel = createInventoryViewModel(member, {
+            category: "all",
+            db: context.db,
+            getOrCreateUser: context.getOrCreateUser,
+            page: 0
+        });
+        const screenData = normalizeInventoryScreenData({
+            category: viewModel.category,
+            page: viewModel.page,
+            playerPP: viewModel.playerPP,
+            sections: viewModel.sections,
+            totalBadges: viewModel.totalBadges,
+            totalShopItems: viewModel.totalShopItems
+        });
+        const buffer = renderInventoryScreen(screenData);
+
+        assert.equal(viewModel.totalPages, 2);
+        assert.equal(viewModel.itemsOnPage.length, 8);
+        assertPngBuffer(buffer);
+    } finally {
+        context.close();
+    }
+});
+
+test("payload ekwipunku ma jedna aktualna grafike i komponenty kategorii", () => {
+    const context = createTempInventoryContext();
+    const member = createMember("inventory-payload-1");
+
+    try {
+        context.addOwnedShopItem(member, "ramka-neon");
+
+        const payload = createInventoryPayload(member, {
+            category: "ramki",
+            db: context.db,
+            getOrCreateUser: context.getOrCreateUser,
+            page: 0
+        });
+
+        assert.deepEqual(payload.embeds, []);
+        assert.deepEqual(payload.attachments, []);
+        assert.equal(payload.files.length, 1);
+        assert.equal(payload.files[0].name, "retroforma-ekwipunek.png");
+        assertPngBuffer(payload.files[0].attachment);
+        assert.ok(payload.components.length >= 3);
+    } finally {
+        context.close();
+    }
+});
+
+test("terminal uzywa prawdziwego assetu PNG bez fallbacku TP", () => {
+    const terminalAsset = resolveUiAsset("item", "terminal");
+    const legacyTerminalAsset = resolveUiAsset("item", "terminal-przenosny");
+
+    assert.equal(terminalAsset.mapped, true);
+    assert.equal(terminalAsset.path, path.resolve(ASSET_ROOT, "gadgets", "terminal.png"));
+    assert.equal(legacyTerminalAsset.mapped, true);
+    assert.equal(legacyTerminalAsset.path, path.resolve(ASSET_ROOT, "gadgets", "terminal.png"));
 });
