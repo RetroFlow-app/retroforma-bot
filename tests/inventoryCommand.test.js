@@ -13,6 +13,7 @@ const {
 } = require("../src/services/inventoryService");
 const {
     createInventoryPayload,
+    createInventoryPayloadFromView,
     createInventoryViewModel
 } = require("../src/services/inventoryViewService");
 const { initializeDatabase } = require("../src/database/schema");
@@ -157,8 +158,70 @@ function createMember(id = "inventory-user-1") {
     };
 }
 
+function createCommandInteraction(member) {
+    const calls = [];
+
+    return {
+        calls,
+        deferred: false,
+        member,
+        replied: false,
+        user: member.user,
+        async deferReply(payload) {
+            calls.push({
+                name: "deferReply",
+                payload
+            });
+            this.deferred = true;
+        },
+        async editReply(payload) {
+            calls.push({
+                name: "editReply",
+                payload
+            });
+            this.replied = true;
+            return payload;
+        },
+        async reply(payload) {
+            calls.push({
+                name: "reply",
+                payload
+            });
+            this.replied = true;
+            return payload;
+        }
+    };
+}
+
+function createSilentLogger() {
+    return {
+        errors: [],
+        infos: [],
+        error(message) {
+            this.errors.push(String(message));
+        },
+        info(message) {
+            this.infos.push(String(message));
+        }
+    };
+}
+
 function getSection(view, sectionId) {
     return view.sections.find((section) => section.id === sectionId);
+}
+
+function getPayloadCustomIds(payload) {
+    return payload.components.flatMap((row) => (
+        row.toJSON().components
+            .map((component) => component.custom_id)
+            .filter(Boolean)
+    ));
+}
+
+function getPayloadSelects(payload) {
+    return payload.components.flatMap((row) => (
+        row.toJSON().components.filter((component) => component.type === 3)
+    ));
 }
 
 test("komenda /ekwipunek jest zarejestrowana jako przeglad kolekcji", () => {
@@ -222,27 +285,27 @@ test("/ekwipunek wyswietla odznaki z istniejacego systemu badges", () => {
 test("/ekwipunek odpowiada ephemeral ekranem PNG bez tekstowego embeda", async () => {
     const context = createTempInventoryContext();
     const member = createMember("empty-inventory-1");
-    let replyPayload = null;
+    const interaction = createCommandInteraction(member);
+    const logger = createSilentLogger();
 
     try {
-        await inventoryCommand.execute({
-            member,
-            reply(payload) {
-                replyPayload = payload;
-                return Promise.resolve();
-            }
-        }, {
+        await inventoryCommand.execute(interaction, {
             db: context.db,
-            getOrCreateUser: context.getOrCreateUser
+            getOrCreateUser: context.getOrCreateUser,
+            logger
         });
 
-        assert.equal(replyPayload.ephemeral, true);
+        const replyPayload = interaction.calls.find((call) => call.name === "editReply").payload;
+
+        assert.deepEqual(interaction.calls.map((call) => call.name), ["deferReply", "editReply"]);
+        assert.equal(interaction.calls[0].payload.ephemeral, true);
         assert.deepEqual(replyPayload.embeds, []);
         assert.deepEqual(replyPayload.attachments, []);
         assert.equal(replyPayload.files.length, 1);
         assert.equal(replyPayload.files[0].name, "retroforma-ekwipunek.png");
         assertPngBuffer(replyPayload.files[0].attachment);
-        assert.ok(replyPayload.components.length >= 2);
+        assert.equal(replyPayload.components.length, 2);
+        assert.equal(logger.infos.includes("[INVENTORY] reply sent"), true);
     } finally {
         context.close();
     }
@@ -426,6 +489,58 @@ test("graficzny ekwipunek renderuje karty i paginuje kolekcje", () => {
     }
 });
 
+test("graficzny ekwipunek dziala dla uzytkownika tylko z odznakami", () => {
+    const context = createTempInventoryContext();
+    const member = createMember("badge-only-inventory");
+
+    try {
+        context.getOrCreateUser(member);
+        context.addBadge(member, {
+            id: "first_mission",
+            name: "Pierwsza Misja",
+            description: "Ukończono pierwszą misję Poligonu."
+        });
+
+        const payload = createInventoryPayload(member, {
+            category: "odznaki",
+            db: context.db,
+            getOrCreateUser: context.getOrCreateUser,
+            page: 0
+        });
+
+        assertPngBuffer(payload.files[0].attachment);
+        assert.equal(payload.components.length, 2);
+    } finally {
+        context.close();
+    }
+});
+
+test("brak assetu pojedynczej karty ekwipunku uzywa fallbacku bez crasha", () => {
+    const buffer = renderInventoryScreen({
+        category: "all",
+        page: 0,
+        playerPP: 0,
+        sections: [
+            {
+                id: "gadzety",
+                title: "Gadzety",
+                items: [
+                    {
+                        code: "brakujacy-asset-ekwipunku",
+                        name: "Brakujący Asset",
+                        rarity: "Rzadka",
+                        type: "shop_item"
+                    }
+                ]
+            }
+        ],
+        totalBadges: 0,
+        totalShopItems: 1
+    });
+
+    assertPngBuffer(buffer);
+});
+
 test("payload ekwipunku ma jedna aktualna grafike i komponenty kategorii", () => {
     const context = createTempInventoryContext();
     const member = createMember("inventory-payload-1");
@@ -446,6 +561,83 @@ test("payload ekwipunku ma jedna aktualna grafike i komponenty kategorii", () =>
         assert.equal(payload.files[0].name, "retroforma-ekwipunek.png");
         assertPngBuffer(payload.files[0].attachment);
         assert.ok(payload.components.length >= 3);
+
+        const customIds = getPayloadCustomIds(payload);
+        assert.equal(customIds.length, new Set(customIds).size);
+    } finally {
+        context.close();
+    }
+});
+
+test("brak motywow i ramek nie tworzy pustych selectow wyposazenia", () => {
+    const context = createTempInventoryContext();
+    const member = createMember("gadget-only-inventory");
+
+    try {
+        context.addOwnedShopItem(member, "kompas-analogowy");
+
+        const payload = createInventoryPayload(member, {
+            category: "gadzety",
+            db: context.db,
+            getOrCreateUser: context.getOrCreateUser,
+            page: 0
+        });
+        const selects = getPayloadSelects(payload);
+
+        assert.equal(payload.components.length, 2);
+        assert.equal(selects.length, 1);
+        assert.ok(selects[0].options.length >= 1);
+        assert.ok(selects[0].options.length <= 25);
+    } finally {
+        context.close();
+    }
+});
+
+test("/ekwipunek wykonuje deferReply przed renderem", async () => {
+    const context = createTempInventoryContext();
+    const member = createMember("defer-before-render");
+    const interaction = createCommandInteraction(member);
+    let renderSawDeferred = false;
+
+    try {
+        await inventoryCommand.execute(interaction, {
+            createInventoryPayloadFromView(payloadMember, viewModel) {
+                renderSawDeferred = interaction.deferred;
+                return createInventoryPayloadFromView(payloadMember, viewModel);
+            },
+            db: context.db,
+            getOrCreateUser: context.getOrCreateUser,
+            logger: createSilentLogger()
+        });
+
+        assert.equal(renderSawDeferred, true);
+        assert.deepEqual(interaction.calls.map((call) => call.name), ["deferReply", "editReply"]);
+    } finally {
+        context.close();
+    }
+});
+
+test("blad renderera ekwipunku konczy sie czytelnym editReply", async () => {
+    const context = createTempInventoryContext();
+    const member = createMember("render-error-inventory");
+    const interaction = createCommandInteraction(member);
+
+    try {
+        await inventoryCommand.execute(interaction, {
+            createInventoryPayloadFromView() {
+                throw new Error("TEST_RENDER_FAILURE");
+            },
+            db: context.db,
+            getOrCreateUser: context.getOrCreateUser,
+            logger: createSilentLogger()
+        });
+
+        const editReply = interaction.calls.find((call) => call.name === "editReply");
+
+        assert.deepEqual(interaction.calls.map((call) => call.name), ["deferReply", "editReply"]);
+        assert.match(editReply.payload.content, /Nie udało się wygenerować ekwipunku/);
+        assert.deepEqual(editReply.payload.components, []);
+        assert.deepEqual(editReply.payload.files, []);
     } finally {
         context.close();
     }
