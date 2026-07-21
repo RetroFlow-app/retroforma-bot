@@ -4,7 +4,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const {
-    getRarityStyle
+    getRarityStyle,
+    normalizeRarity
 } = require("../src/ui/components/badges");
 const {
     clearItemAssetCache,
@@ -380,17 +381,26 @@ test("renderer sklepu obsluguje pierwsza, srodkowa i ostatnia strone", () => {
     }
 });
 
-test("kazda rzadkosc renderuje sie bez bledu", () => {
+test("rzadkosci sa normalizowane do trzech poziomow i renderuja sie bez bledu", () => {
+    const expectedMapping = {
+        Podstawowa: "Podstawowa",
+        Niepospolita: "Podstawowa",
+        Rzadka: "Epicka",
+        Epicka: "Epicka",
+        Legendarna: "Legendarna",
+        uncommon: "Podstawowa",
+        rare: "Epicka",
+        legendary: "Legendarna"
+    };
     const rarities = [
-        "Podstawowa",
-        "Niepospolita",
-        "Rzadka",
-        "Epicka",
-        "Legendarna"
+        ...Object.keys(expectedMapping)
     ];
 
     for (const rarity of rarities) {
-        assert.ok(getRarityStyle(rarity));
+        const style = getRarityStyle(rarity);
+
+        assert.equal(normalizeRarity(rarity), expectedMapping[rarity]);
+        assert.equal(style.label, expectedMapping[rarity]);
         assertPngBuffer(renderShopScreen({
             catalogItems: createCatalogItems(),
             category: "Test",
@@ -403,6 +413,15 @@ test("kazda rzadkosc renderuje sie bez bledu", () => {
             totalPages: 4
         }));
     }
+});
+
+test("kolory rzadkosci sa spojne dla trzech poziomow", () => {
+    assert.equal(getRarityStyle("Podstawowa").label, "Podstawowa");
+    assert.equal(getRarityStyle("Podstawowa").accent, "#4dff9a");
+    assert.equal(getRarityStyle("Niepospolita").label, "Podstawowa");
+    assert.equal(getRarityStyle("Rzadka").label, "Epicka");
+    assert.equal(getRarityStyle("Epicka").accent, "#b778ff");
+    assert.equal(getRarityStyle("Legendarna").accent, "#ffc857");
 });
 
 test("fallback ikony dziala bez assetu", () => {

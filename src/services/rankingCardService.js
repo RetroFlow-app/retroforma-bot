@@ -3,7 +3,7 @@ const { getCurrentLevelProgress } = require("./pointsService");
 
 const CARD_WIDTH = 1080;
 const CARD_HEIGHT = 1610;
-const FALLBACK_FONT = "Segoe UI";
+const FALLBACK_FONT = "\"DejaVu Sans\", \"Noto Sans\", \"Liberation Sans\", \"Segoe UI\", \"Arial\", sans-serif";
 let activeFontFamily = FALLBACK_FONT;
 
 const COLORS = {
@@ -61,7 +61,7 @@ function prepareCanvas() {
     const canvasApi = loadCanvas();
     const registeredFontFamily = registerProfileFont(canvasApi.registerFont);
 
-    activeFontFamily = registeredFontFamily || FALLBACK_FONT;
+    activeFontFamily = registeredFontFamily ? `"${registeredFontFamily}", ${FALLBACK_FONT}` : FALLBACK_FONT;
 
     return canvasApi;
 }

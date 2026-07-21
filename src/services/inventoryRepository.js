@@ -2,6 +2,8 @@ function getDefaultDb() {
     return require("../database/db");
 }
 
+const { normalizeRarity } = require("../utils/rarity");
+
 function createInventoryRepository(database = getDefaultDb()) {
     // userId oznacza wewnętrzne users.id z SQLite, nie Discord snowflake.
     function getOwnedItemIds(userId) {
@@ -36,7 +38,8 @@ function createInventoryRepository(database = getDefaultDb()) {
                 si.name ASC
         `).all(userId).map((item) => ({
             ...item,
-            active: Boolean(item.active)
+            active: Boolean(item.active),
+            rarity: normalizeRarity(item.rarity)
         }));
     }
 
@@ -67,7 +70,8 @@ function createInventoryRepository(database = getDefaultDb()) {
 
         return {
             ...item,
-            active: Boolean(item.active)
+            active: Boolean(item.active),
+            rarity: normalizeRarity(item.rarity)
         };
     }
 
@@ -92,7 +96,8 @@ function createInventoryRepository(database = getDefaultDb()) {
               AND si.active = 1
         `).all(userId).map((item) => ({
             ...item,
-            active: Boolean(item.active)
+            active: Boolean(item.active),
+            rarity: normalizeRarity(item.rarity)
         }));
     }
 

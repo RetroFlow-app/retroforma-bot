@@ -61,7 +61,7 @@ const INITIAL_SHOP_ITEMS = [
         description: "Świetlista ramka profilu inspirowana nocnymi szyldami retrofuturystycznych miast.",
         category: "ramki",
         price: 500,
-        rarity: "Niepospolita"
+        rarity: "Podstawowa"
     },
     {
         code: "ramka-cyan",
@@ -69,7 +69,7 @@ const INITIAL_SHOP_ITEMS = [
         description: "Chlodna ramka profilu z cyfrowym akcentem i czytelnym swiatlem krawedzi.",
         category: "ramki",
         price: 680,
-        rarity: "Rzadka"
+        rarity: "Epicka"
     },
     {
         code: "ramka-amber",
@@ -93,7 +93,7 @@ const INITIAL_SHOP_ITEMS = [
         description: "Subtelny filtr starego monitora, przygotowany pod przyszłe warianty kart profilu.",
         category: "motywy-profilu",
         price: 420,
-        rarity: "Niepospolita"
+        rarity: "Podstawowa"
     },
     {
         code: "tlo-blueprint",
@@ -109,7 +109,7 @@ const INITIAL_SHOP_ITEMS = [
         description: "Nastrojowe tło profilu z miękką poświatą i spokojnym futurystycznym kolorem.",
         category: "motywy-profilu",
         price: 520,
-        rarity: "Niepospolita"
+        rarity: "Podstawowa"
     },
     {
         code: "tlo-storm",
@@ -117,7 +117,7 @@ const INITIAL_SHOP_ITEMS = [
         description: "Ciemne tło profilu z dynamicznym światłem i energią nadciągającego frontu.",
         category: "motywy-profilu",
         price: 720,
-        rarity: "Rzadka"
+        rarity: "Epicka"
     },
     {
         code: "tlo-satellite-array",
@@ -141,7 +141,7 @@ const INITIAL_SHOP_ITEMS = [
         description: "Mały odbiornik pełen szumu, sygnałów i nocnych transmisji RetroForma.",
         category: "gadzety",
         price: 380,
-        rarity: "Niepospolita"
+        rarity: "Podstawowa"
     },
     {
         code: "aparat-polaroid",
@@ -149,7 +149,7 @@ const INITIAL_SHOP_ITEMS = [
         description: "Pamiątkowy aparat do łapania krótkich momentów między kolejnymi misjami.",
         category: "gadzety",
         price: 520,
-        rarity: "Rzadka"
+        rarity: "Epicka"
     },
     {
         code: "terminal",

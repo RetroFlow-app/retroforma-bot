@@ -17,7 +17,9 @@ const {
     SHOP_PURCHASE_ERRORS,
     createShopService
 } = require("../src/services/shopService");
+const { EQUIPMENT_SLOTS } = require("../src/services/inventoryService");
 const { createInventoryRepository } = require("../src/services/inventoryRepository");
+const { RARITY, normalizeRarity } = require("../src/utils/rarity");
 
 function createTempShopContext() {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "retroforma-shop-"));
@@ -242,6 +244,49 @@ test("katalog zawiera aktywna kategorie ramek bez pustych kategorii", () => {
     }
 });
 
+test("seed sklepu uzywa tylko trzech wspieranych rzadkosci", () => {
+    const supportedRarities = new Set(Object.values(RARITY));
+    const seedRarities = new Set(INITIAL_SHOP_ITEMS.map((item) => item.rarity));
+
+    assert.deepEqual([...seedRarities].sort(), ["Epicka", "Podstawowa"]);
+
+    for (const item of INITIAL_SHOP_ITEMS) {
+        assert.equal(supportedRarities.has(item.rarity), true, `${item.code} ma niepoprawna rzadkosc`);
+        assert.equal(normalizeRarity(item.rarity), item.rarity);
+    }
+});
+
+test("widok sklepu pokazuje tylko trzy rzadkosci po normalizacji", () => {
+    const { close, service } = createTempShopContext();
+    const member = createMember("rarity-shop-view");
+    const supportedRarities = new Set(Object.values(RARITY));
+    const visibleRarities = new Set();
+
+    try {
+        const firstView = service.getShopView(member, {
+            category: "all",
+            page: 0
+        });
+
+        for (let page = 0; page < firstView.totalPages; page += 1) {
+            const view = service.getShopView(member, {
+                category: "all",
+                page
+            });
+
+            for (const item of view.items) {
+                visibleRarities.add(item.rarity);
+                assert.equal(supportedRarities.has(item.rarity), true);
+            }
+        }
+
+        assert.equal(visibleRarities.has("Niepospolita"), false);
+        assert.equal(visibleRarities.has("Rzadka"), false);
+    } finally {
+        close();
+    }
+});
+
 test("wszystkie tla profilu sa aktywne w kategorii motywy profilu", () => {
     const { close, db, service } = createTempShopContext();
     const member = createMember();
@@ -332,6 +377,84 @@ test("initializeDatabase przenosi starsze tla do kategorii motywy profilu", () =
 
         assert.equal(getItem(db, "motyw-crt").category, "motywy-profilu");
         assert.equal(getItem(db, "tlo-syntetyczny-zachod").category, "motywy-profilu");
+    } finally {
+        close();
+    }
+});
+
+test("initializeDatabase normalizuje stare rzadkosci bez utraty zakupow i wyposazenia", () => {
+    const {
+        close,
+        db,
+        getInventoryCount,
+        getOrCreateUser
+    } = createTempShopContext();
+    const member = createMember("legacy-rarity-owner");
+
+    try {
+        const user = getOrCreateUser(member);
+        const theme = getItem(db, "tlo-aurora");
+        const frame = getItem(db, "ramka-cyan");
+
+        db.prepare(`
+            UPDATE shop_items
+            SET rarity = ?
+            WHERE id = ?
+        `).run("Niepospolita", theme.id);
+        db.prepare(`
+            UPDATE shop_items
+            SET rarity = ?
+            WHERE id = ?
+        `).run("Rzadka", frame.id);
+        db.prepare(`
+            INSERT INTO user_inventory (user_id, item_id, obtained_at)
+            VALUES (?, ?, ?), (?, ?, ?)
+        `).run(
+            user.id,
+            theme.id,
+            new Date().toISOString(),
+            user.id,
+            frame.id,
+            new Date().toISOString()
+        );
+        db.prepare(`
+            INSERT INTO user_equipment (user_id, slot, item_id, updated_at)
+            VALUES (?, ?, ?, ?), (?, ?, ?, ?)
+        `).run(
+            user.id,
+            EQUIPMENT_SLOTS.PROFILE_THEME,
+            theme.id,
+            new Date().toISOString(),
+            user.id,
+            EQUIPMENT_SLOTS.PROFILE_FRAME,
+            frame.id,
+            new Date().toISOString()
+        );
+
+        initializeDatabase(db);
+
+        const migratedTheme = getItem(db, "tlo-aurora");
+        const migratedFrame = getItem(db, "ramka-cyan");
+        const equipmentRows = db.prepare(`
+            SELECT slot, item_id
+            FROM user_equipment
+            WHERE user_id = ?
+            ORDER BY slot ASC
+        `).all(user.id);
+
+        assert.equal(migratedTheme.rarity, "Podstawowa");
+        assert.equal(migratedFrame.rarity, "Epicka");
+        assert.equal(getInventoryCount(user.id), 2);
+        assert.deepEqual(equipmentRows, [
+            {
+                item_id: frame.id,
+                slot: EQUIPMENT_SLOTS.PROFILE_FRAME
+            },
+            {
+                item_id: theme.id,
+                slot: EQUIPMENT_SLOTS.PROFILE_THEME
+            }
+        ]);
     } finally {
         close();
     }

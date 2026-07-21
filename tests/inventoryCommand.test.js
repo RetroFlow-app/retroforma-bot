@@ -11,6 +11,7 @@ const {
     EQUIPMENT_SLOTS,
     createInventoryService
 } = require("../src/services/inventoryService");
+const { handleInventoryInteraction } = require("../src/handlers/inventoryInteractionHandler");
 const {
     createInventoryPayload,
     createInventoryPayloadFromView,
@@ -22,6 +23,13 @@ const {
     resolveUiAsset
 } = require("../src/ui/assetRegistry");
 const {
+    UI_FONT_STACK,
+    createUiCanvas,
+    setFont
+} = require("../src/ui/renderer");
+const {
+    collectInventoryScreenText,
+    INVENTORY_SCREEN_PAGE_SIZE,
     normalizeInventoryScreenData,
     renderInventoryScreen
 } = require("../src/ui/templates/inventoryScreen");
@@ -193,6 +201,57 @@ function createCommandInteraction(member) {
     };
 }
 
+function createComponentInteraction(member, options = {}) {
+    const calls = [];
+    const componentType = options.type || "button";
+
+    return {
+        calls,
+        customId: options.customId,
+        deferred: false,
+        member,
+        replied: false,
+        user: member.user,
+        values: options.values || [],
+        async deferUpdate() {
+            calls.push({
+                name: "deferUpdate"
+            });
+            this.deferred = true;
+        },
+        async editReply(payload) {
+            calls.push({
+                name: "editReply",
+                payload
+            });
+            this.replied = true;
+            return payload;
+        },
+        async followUp(payload) {
+            calls.push({
+                name: "followUp",
+                payload
+            });
+            this.replied = true;
+            return payload;
+        },
+        isButton() {
+            return componentType === "button";
+        },
+        isStringSelectMenu() {
+            return componentType === "select";
+        },
+        async reply(payload) {
+            calls.push({
+                name: "reply",
+                payload
+            });
+            this.replied = true;
+            return payload;
+        }
+    };
+}
+
 function createSilentLogger() {
     return {
         errors: [],
@@ -222,6 +281,20 @@ function getPayloadSelects(payload) {
     return payload.components.flatMap((row) => (
         row.toJSON().components.filter((component) => component.type === 3)
     ));
+}
+
+function getPayloadButtons(payload) {
+    return payload.components.flatMap((row) => (
+        row.toJSON().components.filter((component) => component.type === 2)
+    ));
+}
+
+function getItemSelect(payload) {
+    return getPayloadSelects(payload).find((select) => select.placeholder === "Wybierz przedmiot");
+}
+
+function getEquipButton(payload) {
+    return getPayloadButtons(payload).find((button) => String(button.custom_id || "").includes(":equip:"));
 }
 
 test("komenda /ekwipunek jest zarejestrowana jako przeglad kolekcji", () => {
@@ -481,9 +554,212 @@ test("graficzny ekwipunek renderuje karty i paginuje kolekcje", () => {
         });
         const buffer = renderInventoryScreen(screenData);
 
-        assert.equal(viewModel.totalPages, 2);
-        assert.equal(viewModel.itemsOnPage.length, 8);
+        assert.equal(INVENTORY_SCREEN_PAGE_SIZE, 4);
+        assert.equal(viewModel.totalPages, 3);
+        assert.equal(viewModel.itemsOnPage.length, 4);
+        assert.equal(screenData.items.length, 4);
+        assert.equal(screenData.categoryCounts["motywy-profilu"], 6);
+        assert.equal(screenData.categoryCounts.ramki, 2);
+        assert.equal(screenData.categoryCounts.gadzety, 1);
+        assert.ok(screenData.totalAvailableItems >= screenData.totalOwnedCount);
+        assert.ok(screenData.selectedItem);
         assertPngBuffer(buffer);
+    } finally {
+        context.close();
+    }
+});
+
+test("select Wybierz przedmiot pokazuje tylko elementy z aktualnej kategorii", () => {
+    const context = createTempInventoryContext();
+    const member = createMember("item-select-category");
+
+    try {
+        context.addOwnedShopItem(member, "tlo-blueprint");
+        context.addOwnedShopItem(member, "ramka-neon");
+        context.addOwnedShopItem(member, "ramka-carbon");
+        context.addOwnedShopItem(member, "kompas-analogowy");
+
+        const payload = createInventoryPayload(member, {
+            category: "ramki",
+            db: context.db,
+            getOrCreateUser: context.getOrCreateUser,
+            page: 0
+        });
+        const itemSelect = getItemSelect(payload);
+        const values = itemSelect.options.map((option) => option.value).sort();
+
+        assert.ok(itemSelect);
+        assert.deepEqual(values, ["ramka-carbon", "ramka-neon"]);
+        assert.equal(values.includes("tlo-blueprint"), false);
+        assert.equal(values.includes("kompas-analogowy"), false);
+    } finally {
+        context.close();
+    }
+});
+
+test("wybor przedmiotu ustawia zaznaczona karte i panel szczegolow", () => {
+    const context = createTempInventoryContext();
+    const member = createMember("selected-item-view");
+
+    try {
+        context.addOwnedShopItem(member, "ramka-neon");
+        context.addOwnedShopItem(member, "ramka-carbon");
+
+        const viewModel = createInventoryViewModel(member, {
+            category: "ramki",
+            db: context.db,
+            getOrCreateUser: context.getOrCreateUser,
+            selectedItemCode: "ramka-carbon"
+        });
+        const selectedItems = viewModel.itemsOnPage.filter((item) => item.selected);
+
+        assert.equal(viewModel.selectedItem.code, "ramka-carbon");
+        assert.equal(viewModel.selectedItemCode, "ramka-carbon");
+        assert.equal(selectedItems.length, 1);
+        assert.equal(selectedItems[0].code, "ramka-carbon");
+    } finally {
+        context.close();
+    }
+});
+
+test("przycisk Wyposaz jest widoczny tylko dla nieaktywnego motywu lub ramki", () => {
+    const context = createTempInventoryContext();
+    const member = createMember("equip-button-visibility");
+    const service = createInventoryService({
+        db: context.db,
+        getOrCreateUser: context.getOrCreateUser
+    });
+
+    try {
+        context.addOwnedShopItem(member, "tlo-blueprint");
+        context.addOwnedShopItem(member, "ramka-neon");
+        context.addOwnedShopItem(member, "kompas-analogowy");
+        context.addBadge(member, {
+            id: "first_mission",
+            name: "Pierwsza Misja",
+            description: "Ukończ pierwszą misję."
+        });
+
+        const inactiveFramePayload = createInventoryPayload(member, {
+            category: "ramki",
+            db: context.db,
+            getOrCreateUser: context.getOrCreateUser,
+            selectedItemCode: "ramka-neon"
+        });
+
+        assert.equal(getEquipButton(inactiveFramePayload).label, "✅ Wyposaż");
+
+        service.equipItem(member, "ramka-neon");
+
+        const activeFramePayload = createInventoryPayload(member, {
+            category: "ramki",
+            db: context.db,
+            getOrCreateUser: context.getOrCreateUser,
+            selectedItemCode: "ramka-neon"
+        });
+        const gadgetPayload = createInventoryPayload(member, {
+            category: "gadzety",
+            db: context.db,
+            getOrCreateUser: context.getOrCreateUser,
+            selectedItemCode: "kompas-analogowy"
+        });
+        const badgePayload = createInventoryPayload(member, {
+            category: "odznaki",
+            db: context.db,
+            getOrCreateUser: context.getOrCreateUser,
+            selectedItemCode: "first_mission"
+        });
+
+        assert.equal(getEquipButton(activeFramePayload), undefined);
+        assert.equal(getEquipButton(gadgetPayload), undefined);
+        assert.equal(getEquipButton(badgePayload), undefined);
+    } finally {
+        context.close();
+    }
+});
+
+test("klikniecie Wyposaz odswieza Canvas i zostawia potwierdzenie bez embeda", async () => {
+    const context = createTempInventoryContext();
+    const member = createMember("equip-button-flow");
+
+    try {
+        context.addOwnedShopItem(member, "tlo-blueprint");
+
+        const initialPayload = createInventoryPayload(member, {
+            category: "motywy-profilu",
+            db: context.db,
+            getOrCreateUser: context.getOrCreateUser,
+            selectedItemCode: "tlo-blueprint"
+        });
+        const equipButton = getEquipButton(initialPayload);
+        const interaction = createComponentInteraction(member, {
+            customId: equipButton.custom_id,
+            type: "button"
+        });
+
+        const handled = await handleInventoryInteraction(interaction, {
+            db: context.db,
+            getOrCreateUser: context.getOrCreateUser
+        });
+        const editReply = interaction.calls.find((call) => call.name === "editReply");
+
+        assert.equal(handled, true);
+        assert.deepEqual(interaction.calls.map((call) => call.name), ["deferUpdate", "editReply", "followUp"]);
+        assert.equal(context.getEquippedCode(member, EQUIPMENT_SLOTS.PROFILE_THEME), "tlo-blueprint");
+        assert.equal(editReply.payload.content, "");
+        assert.deepEqual(editReply.payload.embeds, []);
+        assertPngBuffer(editReply.payload.files[0].attachment);
+        assert.equal(getEquipButton(editReply.payload), undefined);
+        assert.match(interaction.calls.find((call) => call.name === "followUp").payload.content, /Wyposażono „Tło Blueprint”/);
+        assert.equal(interaction.calls.find((call) => call.name === "followUp").payload.ephemeral, true);
+    } finally {
+        context.close();
+    }
+});
+
+test("aktywny motyw i ramka po odswiezeniu nie pokazuja przycisku Wyposaz", () => {
+    const context = createTempInventoryContext();
+    const member = createMember("active-refresh-state");
+    const service = createInventoryService({
+        db: context.db,
+        getOrCreateUser: context.getOrCreateUser
+    });
+
+    try {
+        context.addOwnedShopItem(member, "tlo-blueprint");
+        context.addOwnedShopItem(member, "ramka-neon");
+        service.equipItem(member, "tlo-blueprint");
+        service.equipItem(member, "ramka-neon");
+
+        const themePayload = createInventoryPayload(member, {
+            category: "motywy-profilu",
+            db: context.db,
+            getOrCreateUser: context.getOrCreateUser,
+            selectedItemCode: "tlo-blueprint"
+        });
+        const framePayload = createInventoryPayload(member, {
+            category: "ramki",
+            db: context.db,
+            getOrCreateUser: context.getOrCreateUser,
+            selectedItemCode: "ramka-neon"
+        });
+        const themeText = collectInventoryScreenText(createInventoryViewModel(member, {
+            category: "motywy-profilu",
+            db: context.db,
+            getOrCreateUser: context.getOrCreateUser,
+            selectedItemCode: "tlo-blueprint"
+        })).join("\n");
+        const frameText = collectInventoryScreenText(createInventoryViewModel(member, {
+            category: "ramki",
+            db: context.db,
+            getOrCreateUser: context.getOrCreateUser,
+            selectedItemCode: "ramka-neon"
+        })).join("\n");
+
+        assert.equal(getEquipButton(themePayload), undefined);
+        assert.equal(getEquipButton(framePayload), undefined);
+        assert.match(themeText, /🟢 WYPOSAŻONY/);
+        assert.match(frameText, /🟢 WYPOSAŻONY/);
     } finally {
         context.close();
     }
@@ -509,7 +785,9 @@ test("graficzny ekwipunek dziala dla uzytkownika tylko z odznakami", () => {
         });
 
         assertPngBuffer(payload.files[0].attachment);
-        assert.equal(payload.components.length, 2);
+        assert.equal(payload.components.length, 3);
+        assert.ok(getItemSelect(payload));
+        assert.equal(getEquipButton(payload), undefined);
     } finally {
         context.close();
     }
@@ -541,6 +819,222 @@ test("brak assetu pojedynczej karty ekwipunku uzywa fallbacku bez crasha", () =>
     assertPngBuffer(buffer);
 });
 
+test("renderer ekwipunku zachowuje polskie znaki przed rasteryzacja Canvas", () => {
+    const screenData = {
+        category: "gadzety",
+        page: 0,
+        playerPP: 0,
+        sections: [
+            {
+                id: "gadzety",
+                title: "Gadżety",
+                items: [
+                    {
+                        code: "tlo-blueprint",
+                        description: "Techniczne tło profilu z rysunkiem konstrukcyjnym i chłodnym światłem CAD.",
+                        equipped: true,
+                        name: "Tło Blueprint",
+                        rarity: "Podstawowa",
+                        type: "shop_item"
+                    },
+                    {
+                        code: "radio-kieszonkowe",
+                        description: "Radiowy gadżet gotowy do kolekcji.",
+                        equipped: false,
+                        name: "Radio Kieszonkowe",
+                        rarity: "Niepospolita",
+                        type: "shop_item"
+                    }
+                ]
+            }
+        ],
+        totalBadges: 0,
+        totalShopItems: 2
+    };
+    const joinedText = collectInventoryScreenText(screenData).join("\n");
+
+    assert.match(joinedText, /Tło Blueprint/);
+    assert.match(joinedText, /Gadżety/);
+    assert.match(joinedText.toLowerCase(), /wyposażony/);
+    assert.match(joinedText, /✓ W KOLEKCJI/);
+    assert.match(joinedText, /Techniczne tło profilu/);
+    assert.match(joinedText, /chłodnym światłem/);
+    assert.doesNotMatch(joinedText, /T\?o|Gad\?ety|Wyposa\?ony|Kolekcji\?|t\?o|ch\?odnym|\?wiat\?em|\uFFFD/);
+    assert.equal(joinedText.includes("?"), false);
+    assertPngBuffer(renderInventoryScreen(screenData));
+});
+
+test("renderer ekwipunku ma finalne statusy, CTA i plakietke aktywnego elementu", () => {
+    const baseSections = [
+        {
+            id: "motywy-profilu",
+            title: "Motywy profilu",
+            items: [
+                {
+                    code: "tlo-blueprint",
+                    description: "Techniczne tło profilu.",
+                    equipped: false,
+                    equipmentSlot: EQUIPMENT_SLOTS.PROFILE_THEME,
+                    name: "Tło Blueprint",
+                    rarity: "Podstawowa",
+                    type: "shop_item"
+                },
+                {
+                    code: "tlo-aurora",
+                    description: "Nastrojowe tło profilu.",
+                    equipped: true,
+                    equipmentSlot: EQUIPMENT_SLOTS.PROFILE_THEME,
+                    name: "Tło Aurora",
+                    rarity: "Niepospolita",
+                    type: "shop_item"
+                }
+            ]
+        },
+        {
+            id: "gadzety",
+            title: "Gadżety",
+            items: [
+                {
+                    code: "kompas-analogowy",
+                    description: "Element kolekcjonerski.",
+                    equipped: false,
+                    name: "Kompas Analogowy",
+                    rarity: "Podstawowa",
+                    type: "shop_item"
+                }
+            ]
+        },
+        {
+            id: "odznaki",
+            title: "Odznaki",
+            items: [
+                {
+                    code: "first_mission",
+                    description: "Ukończ pierwszą misję.",
+                    name: "Pierwsza Misja",
+                    type: "badge"
+                }
+            ]
+        }
+    ];
+    const inactiveThemeText = collectInventoryScreenText({
+        category: "motywy-profilu",
+        selectedItemCode: "tlo-blueprint",
+        sections: baseSections,
+        totalAvailableItems: 22
+    }).join("\n");
+    const activeThemeText = collectInventoryScreenText({
+        category: "motywy-profilu",
+        selectedItemCode: "tlo-aurora",
+        sections: baseSections,
+        totalAvailableItems: 22
+    }).join("\n");
+    const gadgetText = collectInventoryScreenText({
+        category: "gadzety",
+        selectedItemCode: "kompas-analogowy",
+        sections: baseSections,
+        totalAvailableItems: 22
+    }).join("\n");
+    const badgeText = collectInventoryScreenText({
+        category: "odznaki",
+        selectedItemCode: "first_mission",
+        sections: baseSections,
+        totalAvailableItems: 22
+    }).join("\n");
+
+    assert.match(inactiveThemeText, /✓ W KOLEKCJI/);
+    assert.match(inactiveThemeText, /✅ WYPOSAŻ/);
+    assert.match(activeThemeText, /🟢 WYPOSAŻONY/);
+    assert.match(activeThemeText, /AKTYWNE/);
+    assert.match(gadgetText, /📦 Element kolekcjonerski/);
+    assert.match(badgeText, /✓ ZDOBYTA/);
+    assert.match(badgeText, /🏅 Zdobyta odznaka/);
+});
+
+test("renderer ekwipunku pokazuje tylko trzy poziomy rzadkosci", () => {
+    const screenText = collectInventoryScreenText({
+        category: "all",
+        sections: [
+            {
+                id: "gadzety",
+                title: "Gadżety",
+                items: [
+                    {
+                        code: "radio-kieszonkowe",
+                        name: "Radio Kieszonkowe",
+                        rarity: "Niepospolita",
+                        type: "shop_item"
+                    },
+                    {
+                        code: "aparat-polaroid",
+                        name: "Aparat Polaroid",
+                        rarity: "Rzadka",
+                        type: "shop_item"
+                    },
+                    {
+                        code: "terminal",
+                        name: "Terminal Polowy",
+                        rarity: "Legendarna",
+                        type: "shop_item"
+                    }
+                ]
+            }
+        ],
+        totalAvailableItems: 22
+    }).join("\n");
+
+    assert.match(screenText, /Podstawowa/);
+    assert.match(screenText, /Epicka/);
+    assert.match(screenText, /Legendarna/);
+    assert.doesNotMatch(screenText, /Niepospolita|Rzadka/);
+});
+
+test("pasek postepu kolekcji liczy proporcje posiadanych elementow", () => {
+    const normalizedData = normalizeInventoryScreenData({
+        category: "all",
+        sections: [
+            {
+                id: "gadzety",
+                title: "Gadżety",
+                items: [
+                    { code: "a", name: "A" },
+                    { code: "b", name: "B" },
+                    { code: "c", name: "C" },
+                    { code: "d", name: "D" }
+                ]
+            }
+        ],
+        totalAvailableItems: 22
+    });
+
+    assert.equal(normalizedData.totalOwnedCount, 4);
+    assert.equal(normalizedData.totalAvailableItems, 22);
+    assert.equal(normalizedData.collectionProgress, 4 / 22);
+    assertPngBuffer(renderInventoryScreen(normalizedData));
+});
+
+test("wspolny renderer UI uzywa font stacka z fallbackiem dla polskich znakow", () => {
+    const { canvas, ctx } = createUiCanvas({
+        height: 140,
+        width: 520
+    });
+
+    setFont(ctx, 24, "800");
+    ctx.fillText("Tło Blueprint Gadżety Wyposażony W kolekcji", 20, 54);
+    setFont(ctx, 18, "600");
+    ctx.fillText("Techniczne tło profilu chłodnym światłem CAD", 20, 92);
+
+    const buffer = canvas.toBuffer("image/png");
+
+    assert.match(UI_FONT_STACK, /DejaVu Sans/);
+    assert.match(UI_FONT_STACK, /Liberation Sans/);
+    assert.equal(buffer.subarray(0, 8).toString("hex"), PNG_SIGNATURE);
+    assert.deepEqual(readPngSize(buffer), {
+        height: 140,
+        width: 520
+    });
+});
+
 test("payload ekwipunku ma jedna aktualna grafike i komponenty kategorii", () => {
     const context = createTempInventoryContext();
     const member = createMember("inventory-payload-1");
@@ -569,7 +1063,7 @@ test("payload ekwipunku ma jedna aktualna grafike i komponenty kategorii", () =>
     }
 });
 
-test("brak motywow i ramek nie tworzy pustych selectow wyposazenia", () => {
+test("gadzet tworzy select przedmiotu, ale nie tworzy przycisku wyposazenia", () => {
     const context = createTempInventoryContext();
     const member = createMember("gadget-only-inventory");
 
@@ -584,10 +1078,11 @@ test("brak motywow i ramek nie tworzy pustych selectow wyposazenia", () => {
         });
         const selects = getPayloadSelects(payload);
 
-        assert.equal(payload.components.length, 2);
-        assert.equal(selects.length, 1);
-        assert.ok(selects[0].options.length >= 1);
-        assert.ok(selects[0].options.length <= 25);
+        assert.equal(payload.components.length, 3);
+        assert.equal(selects.length, 2);
+        assert.equal(getItemSelect(payload).options.length, 1);
+        assert.equal(getItemSelect(payload).options[0].value, "kompas-analogowy");
+        assert.equal(getEquipButton(payload), undefined);
     } finally {
         context.close();
     }

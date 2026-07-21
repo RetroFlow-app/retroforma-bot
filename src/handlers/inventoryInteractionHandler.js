@@ -32,35 +32,53 @@ function getEquipmentErrorMessage(error) {
     return "Nie udało się wyposażyć przedmiotu.";
 }
 
-async function handleCategorySelect(interaction) {
+async function handleCategorySelect(interaction, options = {}) {
     const selectedCategory = interaction.values[0] || "all";
 
     await interaction.deferUpdate();
     await interaction.editReply(
         createInventoryPayload(getInteractionMember(interaction), {
+            ...options,
             category: selectedCategory,
             page: 0
         })
     );
 }
 
-async function handlePageButton(interaction, inventoryInteraction) {
+async function handleItemSelect(interaction, inventoryInteraction, options = {}) {
+    const selectedItemCode = interaction.values[0];
+
     await interaction.deferUpdate();
     await interaction.editReply(
         createInventoryPayload(getInteractionMember(interaction), {
+            ...options,
+            category: inventoryInteraction.category,
+            page: inventoryInteraction.page,
+            selectedItemCode
+        })
+    );
+}
+
+async function handlePageButton(interaction, inventoryInteraction, options = {}) {
+    await interaction.deferUpdate();
+    await interaction.editReply(
+        createInventoryPayload(getInteractionMember(interaction), {
+            ...options,
             category: inventoryInteraction.category,
             page: inventoryInteraction.page
         })
     );
 }
 
-async function handleEquipSelect(interaction, inventoryInteraction) {
-    const itemCode = interaction.values[0];
+async function handleEquipInteraction(interaction, inventoryInteraction, options = {}) {
+    const itemCode = inventoryInteraction.itemCode || interaction.values?.[0];
+    let result;
 
     await interaction.deferUpdate();
 
     try {
-        equipInventoryItem(getInteractionMember(interaction), itemCode, {
+        result = equipInventoryItem(getInteractionMember(interaction), itemCode, {
+            ...options,
             expectedSlot: inventoryInteraction.slot
         });
     } catch (error) {
@@ -78,13 +96,19 @@ async function handleEquipSelect(interaction, inventoryInteraction) {
 
     await interaction.editReply(
         createInventoryPayload(getInteractionMember(interaction), {
+            ...options,
             category: inventoryInteraction.category,
-            page: inventoryInteraction.page
+            page: inventoryInteraction.page,
+            selectedItemCode: itemCode
         })
     );
+    await interaction.followUp({
+        content: `✔ Wyposażono „${result.item.name}”.`,
+        ephemeral: true
+    });
 }
 
-async function handleInventoryInteraction(interaction) {
+async function handleInventoryInteraction(interaction, options = {}) {
     if (!interaction.isButton() && !interaction.isStringSelectMenu()) {
         return false;
     }
@@ -102,17 +126,22 @@ async function handleInventoryInteraction(interaction) {
 
     try {
         if (inventoryInteraction.action === "category" && interaction.isStringSelectMenu()) {
-            await handleCategorySelect(interaction);
+            await handleCategorySelect(interaction, options);
+            return true;
+        }
+
+        if (inventoryInteraction.action === "item" && interaction.isStringSelectMenu()) {
+            await handleItemSelect(interaction, inventoryInteraction, options);
             return true;
         }
 
         if (inventoryInteraction.action === "page" && interaction.isButton()) {
-            await handlePageButton(interaction, inventoryInteraction);
+            await handlePageButton(interaction, inventoryInteraction, options);
             return true;
         }
 
-        if (inventoryInteraction.action === "equip" && interaction.isStringSelectMenu()) {
-            await handleEquipSelect(interaction, inventoryInteraction);
+        if (inventoryInteraction.action === "equip" && (interaction.isButton() || interaction.isStringSelectMenu())) {
+            await handleEquipInteraction(interaction, inventoryInteraction, options);
             return true;
         }
     } catch (error) {
