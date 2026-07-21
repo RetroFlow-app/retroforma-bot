@@ -180,6 +180,7 @@ function createAdminPointsService(options = {}) {
         }
 
         const balanceBefore = getSafeBalance(currentUser.pp);
+        const totalEarnedBefore = getSafeBalance(currentUser.pp_total_earned);
         const balanceAfter = getBalanceAfterOperation({
             amount,
             balanceBefore,
@@ -218,6 +219,8 @@ function createAdminPointsService(options = {}) {
             createdAt: new Date().toISOString()
         });
 
+        const updatedUser = repository.getUserByInternalId(currentUser.id);
+
         return {
             amount,
             balanceAfter,
@@ -226,7 +229,9 @@ function createAdminPointsService(options = {}) {
             reason,
             targetDiscordId: currentUser.discord_id,
             targetUserId: currentUser.id,
-            user: repository.getUserByInternalId(currentUser.id)
+            totalEarnedAfter: getSafeBalance(updatedUser.pp_total_earned),
+            totalEarnedBefore,
+            user: updatedUser
         };
     });
 

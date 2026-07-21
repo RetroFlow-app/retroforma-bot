@@ -22,11 +22,21 @@ function addColumnIfMissing(db, tableName, columnName, columnDefinition) {
 
 // Aktualizuje starsze bazy o nowe pola statystyk użytkownika.
 function migrateUsersTable(db) {
+    const hadTotalEarnedColumn = hasColumn(db, "users", "pp_total_earned");
+
     addColumnIfMissing(db, "users", "xp", "INTEGER DEFAULT 0");
     addColumnIfMissing(db, "users", "level", "INTEGER DEFAULT 1");
+    addColumnIfMissing(db, "users", "pp_total_earned", "INTEGER NOT NULL DEFAULT 0");
     addColumnIfMissing(db, "users", "current_streak", "INTEGER DEFAULT 0");
     addColumnIfMissing(db, "users", "best_streak", "INTEGER DEFAULT 0");
     addColumnIfMissing(db, "users", "last_submission_date", "TEXT");
+
+    if (!hadTotalEarnedColumn) {
+        db.prepare(`
+            UPDATE users
+            SET pp_total_earned = COALESCE(pp, 0)
+        `).run();
+    }
 
     db.prepare(`
         UPDATE users
@@ -221,6 +231,7 @@ function initializeDatabase(db) {
             discord_id TEXT UNIQUE,
             username TEXT,
             pp INTEGER DEFAULT 0,
+            pp_total_earned INTEGER NOT NULL DEFAULT 0,
             xp INTEGER DEFAULT 0,
             level INTEGER DEFAULT 1,
             current_streak INTEGER DEFAULT 0,

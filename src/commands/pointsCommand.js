@@ -56,6 +56,7 @@ function createGoalDescription(pp) {
 // Buduje czytelne podsumowanie Punktów Poligonu dla jednego użytkownika.
 function createPointsSummaryEmbed(userStats) {
     const pp = getSafeNumber(userStats.pp);
+    const ppTotalEarned = getSafeNumber(userStats.pp_total_earned ?? userStats.pp);
     const xp = getSafeNumber(userStats.xp);
     const level = Math.max(1, Number(userStats.level) || 1);
     const missionsCompleted = getSafeNumber(userStats.missions_completed);
@@ -91,7 +92,7 @@ function createPointsSummaryEmbed(userStats) {
             },
             {
                 name: "🏦 Łącznie zdobyte",
-                value: String(pp),
+                value: String(ppTotalEarned),
                 inline: true
             },
             {

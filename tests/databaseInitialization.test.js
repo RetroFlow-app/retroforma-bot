@@ -153,11 +153,18 @@ test("initializeDatabase tworzy mission_publications bez naruszania danych użyt
 
         initializeDatabase(db);
 
-        assert.deepEqual(db.prepare("SELECT * FROM users WHERE discord_id = ?").get("123"), userBefore);
+        const userAfter = db.prepare("SELECT * FROM users WHERE discord_id = ?").get("123");
+
+        assert.equal(userAfter.pp_total_earned, userBefore.pp);
+        assert.deepEqual(
+            Object.fromEntries(Object.entries(userAfter).filter(([key]) => key !== "pp_total_earned")),
+            userBefore
+        );
         assert.deepEqual(db.prepare("SELECT * FROM submissions WHERE discord_id = ?").get("123"), submissionBefore);
         assert.deepEqual(db.prepare("SELECT * FROM badges WHERE id = ?").get("first-mission"), badgeBefore);
         assert.deepEqual(db.prepare("SELECT * FROM users_badges WHERE discord_id = ?").get("123"), userBadgeBefore);
         assert.ok(getTableNames(db).includes("mission_publications"));
+        assert.ok(getTableNames(db).includes("admin_point_transactions"));
     } finally {
         close();
     }
@@ -205,6 +212,37 @@ test("initializeDatabase można uruchomić wielokrotnie bez resetowania danych",
 
         assert.deepEqual(db.prepare("SELECT * FROM users WHERE discord_id = ?").get("456"), userBefore);
         assert.deepEqual(db.prepare("SELECT * FROM mission_publications WHERE mission_id = ?").get(6), publicationBefore);
+    } finally {
+        close();
+    }
+});
+
+test("initializeDatabase kopiuje stare saldo PP do pp_total_earned tylko przy migracji", () => {
+    const { db, close } = createTempDatabase();
+
+    try {
+        seedExistingProductionLikeData(db);
+
+        initializeDatabase(db);
+
+        const migratedUser = db.prepare("SELECT pp, pp_total_earned FROM users WHERE discord_id = ?").get("123");
+
+        assert.equal(migratedUser.pp, 240);
+        assert.equal(migratedUser.pp_total_earned, 240);
+
+        db.prepare(`
+            UPDATE users
+            SET pp = ?,
+                pp_total_earned = ?
+            WHERE discord_id = ?
+        `).run(40, 240, "123");
+
+        initializeDatabase(db);
+
+        const afterSecondRun = db.prepare("SELECT pp, pp_total_earned FROM users WHERE discord_id = ?").get("123");
+
+        assert.equal(afterSecondRun.pp, 40);
+        assert.equal(afterSecondRun.pp_total_earned, 240);
     } finally {
         close();
     }

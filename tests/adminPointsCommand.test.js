@@ -70,12 +70,14 @@ function createTempContext() {
         db.prepare(`
             UPDATE users
             SET pp = ?,
+                pp_total_earned = ?,
                 xp = ?,
                 level = ?,
                 missions_completed = ?
             WHERE discord_id = ?
         `).run(
             stats.pp ?? 0,
+            stats.ppTotalEarned ?? stats.pp ?? 0,
             stats.xp ?? 0,
             stats.level ?? 1,
             stats.missionsCompleted ?? 0,
@@ -289,6 +291,7 @@ test("administrator może dodać PP i operacja trafia do historii", async () => 
     try {
         context.setUserStats(targetUser.id, {
             pp: 120,
+            ppTotalEarned: 120,
             xp: 800,
             level: 4,
             missionsCompleted: 3
@@ -301,8 +304,10 @@ test("administrator może dodać PP i operacja trafia do historii", async () => 
 
         assert.deepEqual(interaction.calls.map((call) => call.name), ["deferReply", "editReply"]);
         assert.equal(user.pp, 620);
+        assert.equal(user.pp_total_earned, 120);
         assert.equal(user.xp, 800);
         assert.equal(user.missions_completed, 3);
+        assert.match(interaction.calls[1].payload.embeds[0].data.description, /Łącznie zdobyte:\n120 PP/);
         assert.equal(transactions.length, 1);
         assert.equal(transactions[0].target_user_id, user.id);
         assert.equal(transactions[0].target_discord_id, targetUser.id);
@@ -326,12 +331,14 @@ test("administrator może odjąć PP bez zejścia poniżej zera", async () => {
 
     try {
         context.setUserStats(targetUser.id, {
-            pp: 500
+            pp: 500,
+            ppTotalEarned: 700
         });
 
         await command.execute(interaction, createCommandDependencies(context));
 
         assert.equal(context.getUser(targetUser.id).pp, 300);
+        assert.equal(context.getUser(targetUser.id).pp_total_earned, 700);
         assert.equal(context.getTransactions()[0].balance_after, 300);
     } finally {
         context.close();
@@ -351,6 +358,7 @@ test("administrator może ustawić saldo PP", async () => {
     try {
         context.setUserStats(targetUser.id, {
             pp: 250,
+            ppTotalEarned: 900,
             xp: 1500,
             missionsCompleted: 6
         });
@@ -360,6 +368,7 @@ test("administrator może ustawić saldo PP", async () => {
         const user = context.getUser(targetUser.id);
 
         assert.equal(user.pp, 1000);
+        assert.equal(user.pp_total_earned, 900);
         assert.equal(user.xp, 1500);
         assert.equal(user.missions_completed, 6);
     } finally {
@@ -512,7 +521,8 @@ test("administracyjna operacja nie zmienia inventory ani user_equipment", () => 
 
     try {
         context.setUserStats(targetUser.id, {
-            pp: 100
+            pp: 100,
+            ppTotalEarned: 300
         });
         context.addOwnedAndEquippedItem(targetUser.id, "tlo-blueprint");
 
@@ -550,7 +560,8 @@ test("awaria zapisu historii cofa zmianę salda PP", () => {
 
     try {
         context.setUserStats(targetUser.id, {
-            pp: 100
+            pp: 100,
+            ppTotalEarned: 300
         });
 
         assert.throws(
@@ -563,6 +574,7 @@ test("awaria zapisu historii cofa zmianę salda PP", () => {
             /AUDIT_LOG_DOWN/
         );
         assert.equal(context.getUser(targetUser.id).pp, 100);
+        assert.equal(context.getUser(targetUser.id).pp_total_earned, 300);
         assert.equal(context.getTransactions().length, 0);
     } finally {
         context.close();
@@ -580,6 +592,7 @@ test("ręczne dodanie PP nie zwiększa XP ani liczby ukończonych misji", () => 
     try {
         context.setUserStats(targetUser.id, {
             pp: 100,
+            ppTotalEarned: 700,
             xp: 900,
             level: 4,
             missionsCompleted: 8
@@ -595,6 +608,7 @@ test("ręczne dodanie PP nie zwiększa XP ani liczby ukończonych misji", () => 
         const user = context.getUser(targetUser.id);
 
         assert.equal(user.pp, 500);
+        assert.equal(user.pp_total_earned, 700);
         assert.equal(user.xp, 900);
         assert.equal(user.level, 4);
         assert.equal(user.missions_completed, 8);

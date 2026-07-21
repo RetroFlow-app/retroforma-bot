@@ -136,14 +136,18 @@ function getUserBadges(discordId, limit = 6) {
     `).all(discordId, limit);
 }
 
-// Pobiera aktualną pierwszą trójkę rankingu PP.
+// Pobiera pierwszą trójkę rankingu na podstawie łącznie zdobytych PP.
 function getTopParticipantIds() {
     return db.prepare(`
         SELECT discord_id
         FROM users
-        WHERE pp > 0
+        WHERE pp_total_earned > 0
            OR missions_completed > 0
-        ORDER BY pp DESC, missions_completed DESC, id ASC
+        ORDER BY pp_total_earned DESC,
+                 xp DESC,
+                 level DESC,
+                 LOWER(COALESCE(username, '')) ASC,
+                 id ASC
         LIMIT 3
     `).all().map((user) => user.discord_id);
 }

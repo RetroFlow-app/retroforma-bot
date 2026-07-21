@@ -116,8 +116,14 @@ function createAdminPointsSuccessEmbed({ rankingUpdated, result, targetUser }) {
             `Użytkownik: <@${targetUser.id}>`,
             `Operacja: ${getOperationLabel(result.operation)}`,
             `Kwota: ${result.amount} PP`,
+            "",
+            "Saldo:",
+            `${result.balanceAfter} PP`,
+            "",
+            "Łącznie zdobyte:",
+            `${result.totalEarnedAfter} PP`,
+            "",
             `Poprzednie saldo: ${result.balanceBefore} PP`,
-            `Nowe saldo: ${result.balanceAfter} PP`,
             `Powód: ${result.reason}`,
             "",
             `Ranking odświeżony: ${rankingUpdated ? "tak" : "nie"}`
@@ -173,6 +179,7 @@ async function writeAdminPointsLog({
         `amount=${result.amount}`,
         `before=${result.balanceBefore}`,
         `after=${result.balanceAfter}`,
+        `total_earned=${result.totalEarnedAfter}`,
         `reason=${reason}`
     ].join(" ");
 
@@ -190,6 +197,7 @@ async function writeAdminPointsLog({
                 `Kwota: ${result.amount} PP`,
                 `Poprzednie saldo: ${result.balanceBefore} PP`,
                 `Nowe saldo: ${result.balanceAfter} PP`,
+                `Łącznie zdobyte: ${result.totalEarnedAfter} PP`,
                 `Powód: ${reason}`
             ].join("\n")
         );
