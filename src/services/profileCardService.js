@@ -1,10 +1,17 @@
 const CARD_WIDTH = 1200;
 const CARD_HEIGHT = 675;
+const PROFILE_AVATAR_BOUNDS = {
+    x: 135,
+    y: 142,
+    width: 160,
+    height: 160
+};
+const PROFILE_AVATAR_FRAME_PADDING = 8;
+const PROFILE_THEME_OVERLAY_MAX_ALPHA = 0.42;
 const FALLBACK_FONT = "\"DejaVu Sans\", \"Noto Sans\", \"Liberation Sans\", \"Segoe UI\", \"Arial\", sans-serif";
 let activeFontFamily = FALLBACK_FONT;
 
 const {
-    loadBadgeIconAssets,
     loadProfileAssets,
     registerProfileFont
 } = require("./profileAssetService");
@@ -30,9 +37,61 @@ function loadProfileEquipmentAssets(profile) {
     const frameAsset = resolveProfileFrameAsset(profile.equipment);
 
     return {
+        equippedProfileFrameCode: frameAsset?.id || null,
         equippedProfileFrame: frameAsset ? loadUiAssetImage("item", frameAsset.id) : null,
+        equippedProfileThemeCode: themeAsset?.id || null,
         equippedProfileTheme: themeAsset ? loadUiAssetImage("item", themeAsset.id) : null
     };
+}
+
+function annotateFrameCenterAlpha(frameImage, canvasApi) {
+    if (!frameImage || typeof frameImage.__profileCenterAlpha === "number") {
+        return frameImage;
+    }
+
+    try {
+        const sampleCanvas = canvasApi.createCanvas(frameImage.width, frameImage.height);
+        const sampleCtx = sampleCanvas.getContext("2d");
+        const samplePoints = [
+            [0.5, 0.5],
+            [0.5, 0.38],
+            [0.5, 0.62],
+            [0.35, 0.5],
+            [0.65, 0.5]
+        ];
+
+        sampleCtx.drawImage(frameImage, 0, 0);
+        frameImage.__profileCenterAlpha = Math.max(...samplePoints.map(([x, y]) => (
+            sampleCtx.getImageData(
+                Math.floor(frameImage.width * x),
+                Math.floor(frameImage.height * y),
+                1,
+                1
+            ).data[3]
+        )));
+    } catch (error) {
+        frameImage.__profileCenterAlpha = 255;
+    }
+
+    return frameImage;
+}
+
+function loadProfileBadgeIcons(badges = []) {
+    const badgeIcons = {};
+
+    for (const badge of badges) {
+        try {
+            const icon = loadUiAssetImage("badge", badge.id);
+
+            if (icon) {
+                badgeIcons[badge.id] = icon;
+            }
+        } catch (error) {
+            console.warn(`[PROFILE_RENDER] Nie udało się wczytać assetu odznaki ${badge.id}: ${error.message}`);
+        }
+    }
+
+    return badgeIcons;
 }
 
 // Ładuje canvas, assety i opcjonalne ikony odznak.
@@ -42,13 +101,19 @@ async function loadCanvasContext(profile) {
 
     activeFontFamily = registeredFontFamily ? `"${registeredFontFamily}", ${FALLBACK_FONT}` : FALLBACK_FONT;
 
+    const equipmentAssets = loadProfileEquipmentAssets(profile);
+
+    if (equipmentAssets.equippedProfileFrame) {
+        annotateFrameCenterAlpha(equipmentAssets.equippedProfileFrame, canvasApi);
+    }
+
     return {
         ...canvasApi,
         assets: {
             ...await loadProfileAssets(canvasApi.loadImage),
-            ...loadProfileEquipmentAssets(profile)
+            ...equipmentAssets
         },
-        badgeIcons: await loadBadgeIconAssets(canvasApi.loadImage, profile.badges || [])
+        badgeIcons: loadProfileBadgeIcons(profile.badges || [])
     };
 }
 
@@ -193,12 +258,19 @@ function drawImageContain(ctx, image, x, y, width, height) {
     ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
 }
 
-function drawProfileThemeOverlay(ctx) {
+function traceRender(options, step) {
+    if (Array.isArray(options?.trace)) {
+        options.trace.push(step);
+    }
+}
+
+function drawProfileThemeOverlay(ctx, options = {}) {
+    traceRender(options, "background:overlay");
     const overlay = ctx.createLinearGradient(0, 0, CARD_WIDTH, CARD_HEIGHT);
 
-    overlay.addColorStop(0, "rgba(2, 6, 23, 0.62)");
-    overlay.addColorStop(0.42, "rgba(2, 6, 23, 0.34)");
-    overlay.addColorStop(1, "rgba(2, 6, 23, 0.72)");
+    overlay.addColorStop(0, "rgba(2, 6, 23, 0.34)");
+    overlay.addColorStop(0.42, "rgba(2, 6, 23, 0.24)");
+    overlay.addColorStop(1, "rgba(2, 6, 23, 0.42)");
     ctx.fillStyle = overlay;
     ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
 
@@ -212,19 +284,22 @@ function drawProfileThemeOverlay(ctx) {
     );
 
     vignette.addColorStop(0, "rgba(0, 0, 0, 0)");
-    vignette.addColorStop(1, "rgba(0, 0, 0, 0.46)");
+    vignette.addColorStop(1, "rgba(0, 0, 0, 0.30)");
     ctx.fillStyle = vignette;
     ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
 }
 
 // Rysuje tło AAA: aktywny motyw profilu, asset domyślny albo techniczny gradient.
-function drawBackground(ctx, assets) {
+function drawBackground(ctx, assets, options = {}) {
     if (assets.equippedProfileTheme) {
+        traceRender(options, "background:equipped-theme");
         drawImageCover(ctx, assets.equippedProfileTheme, 0, 0, CARD_WIDTH, CARD_HEIGHT);
-        drawProfileThemeOverlay(ctx);
+        drawProfileThemeOverlay(ctx, options);
     } else if (assets.background) {
+        traceRender(options, "background:default-asset");
         ctx.drawImage(assets.background, 0, 0, CARD_WIDTH, CARD_HEIGHT);
     } else {
+        traceRender(options, "background:default-gradient");
         const gradient = ctx.createLinearGradient(0, 0, CARD_WIDTH, CARD_HEIGHT);
 
         gradient.addColorStop(0, "#05070d");
@@ -245,8 +320,10 @@ function drawBackground(ctx, assets) {
         }
     }
 
-    drawGlow(ctx, 235, 155, 260, "rgba(250, 166, 26, 0.20)");
-    drawGlow(ctx, 980, 520, 320, "rgba(88, 101, 242, 0.16)");
+    const hasEquippedTheme = Boolean(assets.equippedProfileTheme);
+
+    drawGlow(ctx, 235, 155, 260, hasEquippedTheme ? "rgba(250, 166, 26, 0.10)" : "rgba(250, 166, 26, 0.20)");
+    drawGlow(ctx, 980, 520, 320, hasEquippedTheme ? "rgba(88, 101, 242, 0.09)" : "rgba(88, 101, 242, 0.16)");
 
     drawLine(ctx, 36, 36, 360, 36, "rgba(254, 231, 92, 0.55)", 2);
     drawLine(ctx, 36, 36, 36, 178, "rgba(254, 231, 92, 0.34)", 2);
@@ -254,12 +331,14 @@ function drawBackground(ctx, assets) {
     drawLine(ctx, 1164, 638, 1164, 496, "rgba(254, 231, 92, 0.30)", 2);
 }
 
-function drawPanel(ctx, x, y, width, height, radius = 30) {
+function drawPanel(ctx, x, y, width, height, radius = 30, options = {}) {
+    const fill = options.themeMode ? "rgba(8, 13, 23, 0.58)" : "rgba(8, 13, 23, 0.82)";
+
     ctx.save();
     ctx.shadowColor = "rgba(0, 0, 0, 0.45)";
     ctx.shadowBlur = 28;
     ctx.shadowOffsetY = 12;
-    fillRoundedRect(ctx, x, y, width, height, radius, "rgba(8, 13, 23, 0.82)");
+    fillRoundedRect(ctx, x, y, width, height, radius, fill);
     ctx.restore();
 
     strokeRoundedRect(ctx, x, y, width, height, radius, "rgba(255, 255, 255, 0.08)", 1.5);
@@ -277,14 +356,16 @@ async function loadAvatar(loadImage, avatarUrl) {
     }
 }
 
-function drawCircularImage(ctx, image, centerX, centerY, radius) {
+function drawCircularImage(ctx, image, centerX, centerY, radius, options = {}) {
     ctx.save();
+    traceRender(options, "avatar:clip:start");
     ctx.beginPath();
     ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
     ctx.closePath();
     ctx.clip();
     ctx.drawImage(image, centerX - radius, centerY - radius, radius * 2, radius * 2);
     ctx.restore();
+    traceRender(options, "avatar:clip:restore");
 }
 
 function drawAvatarPlaceholder(ctx, centerX, centerY, radius, profile) {
@@ -304,10 +385,86 @@ function drawAvatarPlaceholder(ctx, centerX, centerY, radius, profile) {
     ctx.textAlign = "left";
 }
 
-function drawAvatar(ctx, profile, avatarImage, assets) {
-    const centerX = 215;
-    const centerY = 218;
-    const radius = 76;
+function getAvatarLayout() {
+    const centerX = PROFILE_AVATAR_BOUNDS.x + PROFILE_AVATAR_BOUNDS.width / 2;
+    const centerY = PROFILE_AVATAR_BOUNDS.y + PROFILE_AVATAR_BOUNDS.height / 2;
+    const radius = Math.min(PROFILE_AVATAR_BOUNDS.width, PROFILE_AVATAR_BOUNDS.height) / 2 - 16;
+    const frameSize = Math.min(
+        PROFILE_AVATAR_BOUNDS.width + PROFILE_AVATAR_FRAME_PADDING * 2,
+        176
+    );
+
+    return {
+        bounds: { ...PROFILE_AVATAR_BOUNDS },
+        centerX,
+        centerY,
+        frameBounds: {
+            x: centerX - frameSize / 2,
+            y: centerY - frameSize / 2,
+            width: frameSize,
+            height: frameSize
+        },
+        radius
+    };
+}
+
+function isFrameCenterTransparent(frameImage) {
+    if (!frameImage) {
+        return false;
+    }
+
+    const centerAlpha = typeof frameImage.__profileCenterAlpha === "number"
+        ? frameImage.__profileCenterAlpha
+        : null;
+
+    if (centerAlpha === null) {
+        return true;
+    }
+
+    return centerAlpha < 64;
+}
+
+function drawAvatarFrame(ctx, assets, layout, options = {}) {
+    if (assets.equippedProfileFrame && isFrameCenterTransparent(assets.equippedProfileFrame)) {
+        traceRender(options, "frame:equipped");
+        drawImageContain(
+            ctx,
+            assets.equippedProfileFrame,
+            layout.frameBounds.x,
+            layout.frameBounds.y,
+            layout.frameBounds.width,
+            layout.frameBounds.height
+        );
+        return;
+    }
+
+    if (assets.equippedProfileFrame) {
+        traceRender(options, "frame:equipped-skipped-opaque");
+    }
+
+    if (assets.avatarFrame) {
+        traceRender(options, "frame:default-asset");
+        drawImageContain(
+            ctx,
+            assets.avatarFrame,
+            layout.frameBounds.x,
+            layout.frameBounds.y,
+            layout.frameBounds.width,
+            layout.frameBounds.height
+        );
+        return;
+    }
+
+    traceRender(options, "frame:default-circle");
+}
+
+function drawAvatar(ctx, profile, avatarImage, assets, options = {}) {
+    const layout = getAvatarLayout();
+    const {
+        centerX,
+        centerY,
+        radius
+    } = layout;
 
     ctx.save();
     ctx.shadowColor = "rgba(250, 166, 26, 0.32)";
@@ -319,8 +476,10 @@ function drawAvatar(ctx, profile, avatarImage, assets) {
     ctx.restore();
 
     if (avatarImage) {
-        drawCircularImage(ctx, avatarImage, centerX, centerY, radius);
+        traceRender(options, "avatar:image");
+        drawCircularImage(ctx, avatarImage, centerX, centerY, radius, options);
     } else {
+        traceRender(options, "avatar:fallback");
         drawAvatarPlaceholder(ctx, centerX, centerY, radius, profile);
     }
 
@@ -336,11 +495,7 @@ function drawAvatar(ctx, profile, avatarImage, assets) {
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    if (assets.equippedProfileFrame) {
-        drawImageContain(ctx, assets.equippedProfileFrame, centerX - 116, centerY - 116, 232, 232);
-    } else if (assets.avatarFrame) {
-        ctx.drawImage(assets.avatarFrame, centerX - 106, centerY - 106, 212, 212);
-    }
+    drawAvatarFrame(ctx, assets, layout, options);
 }
 
 function drawRankFrame(ctx, profile, assets) {
@@ -380,12 +535,15 @@ function drawRankFrame(ctx, profile, assets) {
     });
 }
 
-function drawIdentityPanel(ctx, profile, avatarImage, assets) {
-    drawPanel(ctx, 52, 52, 326, 570, 32);
+function drawIdentityPanel(ctx, profile, avatarImage, assets, options = {}) {
+    traceRender(options, "panel:identity");
+    drawPanel(ctx, 52, 52, 326, 570, 32, options);
 
     if (assets.profileMark) {
         ctx.drawImage(assets.profileMark, 82, 80, 42, 42);
     }
+
+    drawAvatar(ctx, profile, avatarImage, assets, options);
 
     ctx.fillStyle = "#94a3b8";
     ctx.font = `800 13px ${getFontFamily()}`;
@@ -394,8 +552,6 @@ function drawIdentityPanel(ctx, profile, avatarImage, assets) {
     ctx.fillStyle = "#fee75c";
     ctx.font = `900 24px ${getFontFamily()}`;
     ctx.fillText("KARTA KADETA", 82, 116);
-
-    drawAvatar(ctx, profile, avatarImage, assets);
 
     drawFittedText(ctx, trimText(profile.username, 22), 215, 338, 260, {
         color: "#f8fafc",
@@ -457,6 +613,12 @@ function drawHeader(ctx, profile) {
         minSize: 15,
         weight: "900"
     });
+
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = `700 13px ${getFontFamily()}`;
+    ctx.textAlign = "right";
+    ctx.fillText(`Łącznie zdobyto ${formatNumber(profile.ppTotalEarned ?? profile.pp)} PP`, 1118, 136);
+    ctx.textAlign = "left";
 }
 
 function drawStatTile(ctx, x, y, width, height, label, value, accent = "#faa61a") {
@@ -552,7 +714,7 @@ function drawBadges(ctx, profile, badgeIcons) {
     if (badges.length === 0) {
         ctx.fillStyle = "#64748b";
         ctx.font = `700 17px ${getFontFamily()}`;
-        ctx.fillText("Brak odznak do wyświetlenia", x + 24, y + 66);
+        ctx.fillText("Brak zdobytych odznak", x + 24, y + 66);
         return;
     }
 
@@ -630,6 +792,48 @@ function drawFrame(ctx, assets) {
     }
 }
 
+// Zwraca teksty profilu przed rasteryzacją, żeby testy nie musiały czytać pikseli Canvas.
+function collectProfileCardText(profile) {
+    const badges = (profile.badges || []).slice(0, 6);
+
+    return [
+        profile.username,
+        `${formatNumber(profile.pp)} PP`,
+        `Łącznie zdobyto ${formatNumber(profile.ppTotalEarned ?? profile.pp)} PP`,
+        `#${profile.rankingPosition || "-"}`,
+        formatNumber(profile.xp),
+        formatNumber(profile.missionsCompleted),
+        badges.length > 0 ? badges.map((badge) => badge.name).join(" ") : "Brak zdobytych odznak"
+    ].filter(Boolean);
+}
+
+function getProfileRenderDiagnostics(profile, assets, avatarImage) {
+    const badges = profile.badges || [];
+
+    return {
+        avatarLoaded: Boolean(avatarImage),
+        badgeCodes: badges.map((badge) => badge.id),
+        badgesCount: badges.length,
+        frame: assets.equippedProfileFrameCode || profile.equipment?.frame?.code || "none",
+        theme: assets.equippedProfileThemeCode || profile.equipment?.theme?.code || "none",
+        user: profile.discordId || "unknown"
+    };
+}
+
+function logProfileRenderDiagnostics(profile, assets, avatarImage, logger = console) {
+    const diagnostics = getProfileRenderDiagnostics(profile, assets, avatarImage);
+
+    logger.info([
+        "[PROFILE_RENDER]",
+        `user=${diagnostics.user}`,
+        `theme=${diagnostics.theme}`,
+        `frame=${diagnostics.frame}`,
+        `avatar_loaded=${diagnostics.avatarLoaded}`,
+        `badges_count=${diagnostics.badgesCount}`,
+        `badge_codes=${diagnostics.badgeCodes.join(",") || "none"}`
+    ].join(" "));
+}
+
 // Generuje statyczną kartę profilu. Opcja animationProgress jest gotowa pod przyszłe klatki animacji.
 async function createProfileCard(profile, options = {}) {
     const {
@@ -641,14 +845,21 @@ async function createProfileCard(profile, options = {}) {
     const avatarImage = await loadAvatar(loadImage, profile.avatarUrl);
     const canvas = createCanvas(CARD_WIDTH, CARD_HEIGHT);
     const ctx = canvas.getContext("2d");
+    const renderOptions = {
+        ...options,
+        themeMode: Boolean(assets.equippedProfileTheme)
+    };
 
-    drawBackground(ctx, assets);
-    drawIdentityPanel(ctx, profile, avatarImage, assets);
-    drawPanel(ctx, 398, 52, 750, 570, 32);
+    logProfileRenderDiagnostics(profile, assets, avatarImage, options.logger || console);
+
+    drawBackground(ctx, assets, renderOptions);
+    drawIdentityPanel(ctx, profile, avatarImage, assets, renderOptions);
+    traceRender(renderOptions, "panel:main");
+    drawPanel(ctx, 398, 52, 750, 570, 32, renderOptions);
     drawHeader(ctx, profile);
     drawStatsGrid(ctx, profile);
+    drawXPBar(ctx, profile, renderOptions);
     drawBadges(ctx, profile, badgeIcons);
-    drawXPBar(ctx, profile, options);
     drawFooter(ctx);
     drawFrame(ctx, assets);
 
@@ -656,8 +867,12 @@ async function createProfileCard(profile, options = {}) {
 }
 
 module.exports = {
+    PROFILE_AVATAR_BOUNDS,
+    PROFILE_THEME_OVERLAY_MAX_ALPHA,
+    collectProfileCardText,
     createProfileCard,
     drawImageCover,
     drawImageContain,
+    getAvatarLayout,
     getProgressAnimationFrames
 };

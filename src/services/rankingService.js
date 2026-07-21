@@ -3,13 +3,19 @@ const { AttachmentBuilder } = require("discord.js");
 
 const config = require("../config/appConfig");
 const { systemStatePath } = require("../config/paths");
-const db = require("../database/db");
 const { createRankingEmbed } = require("../utils/embedFactory");
-const { awardTop3Badges } = require("./badgeService");
 const { createRankingCard } = require("./rankingCardService");
 const { getRank } = require("./rankService");
 
 const RANKING_ATTACHMENT_NAME = "ranking-poligonu.png";
+
+function getDefaultDb() {
+    return require("../database/db");
+}
+
+function awardTop3BadgesForCurrentRanking() {
+    return require("./badgeService").awardTop3Badges();
+}
 
 // Wczytuje plik systemowy z identyfikatorami wiadomości technicznych bota.
 function loadSystemState() {
@@ -36,28 +42,36 @@ function saveSystemState(state) {
     );
 }
 
-// Pobiera TOP 10 użytkowników według obecnego znaczenia rankingu.
-function getTopUsers() {
-    return db.prepare(`
+// Pobiera TOP 10 według łącznej liczby zdobytych PP, a nie aktualnego salda.
+function getTopUsersFromDatabase(database = getDefaultDb()) {
+    return database.prepare(`
         SELECT
             id,
             discord_id,
             username,
-            pp,
+            pp AS pp_balance,
+            pp_total_earned AS pp,
+            pp_total_earned,
             xp,
             level,
             missions_completed
         FROM users
-        ORDER BY pp DESC,
-                 missions_completed DESC,
+        ORDER BY pp_total_earned DESC,
+                 xp DESC,
+                 level DESC,
+                 LOWER(COALESCE(username, '')) ASC,
                  id ASC
         LIMIT 10
     `).all();
 }
 
+function getTopUsers() {
+    return getTopUsersFromDatabase(getDefaultDb());
+}
+
 // Pobiera podsumowanie całego Poligonu.
-function getRankingStats() {
-    return db.prepare(`
+function getRankingStats(database = getDefaultDb()) {
+    return database.prepare(`
         SELECT
             COUNT(*) AS user_count,
             COALESCE(SUM(missions_completed), 0) AS completed_missions
@@ -110,6 +124,8 @@ async function prepareRankingUsers(client, users) {
             username: displayName,
             rankName: getRank(level),
             pp: getSafeNumber(user.pp),
+            ppBalance: getSafeNumber(user.pp_balance),
+            ppTotalEarned: getSafeNumber(user.pp_total_earned ?? user.pp),
             xp: getSafeNumber(user.xp),
             level,
             missionsCompleted: getSafeNumber(user.missions_completed),
@@ -206,7 +222,7 @@ async function updateRankingMessage(client) {
     const rankingMessage = await fetchRankingMessage(channel, state.rankingMessageId);
 
     // TOP 3 jest odznaką przyznawaną na podstawie aktualnego rankingu PP.
-    awardTop3Badges();
+    awardTop3BadgesForCurrentRanking();
 
     const payload = await buildRankingPayload(client);
 
@@ -231,5 +247,6 @@ async function updateRankingMessage(client) {
 module.exports = {
     buildRankingPayload,
     getTopUsers,
+    getTopUsersFromDatabase,
     updateRankingMessage
 };

@@ -10,13 +10,47 @@ const {
 const { getProfileEquipment } = require("./profileEquipmentService");
 const { getRank } = require("./rankService");
 
-// Wylicza pozycję w rankingu na podstawie liczby PP.
-function getUserRankingPosition(pp) {
+// Wylicza pozycję w rankingu na podstawie łącznie zdobytych PP, XP, poziomu i nicku.
+function getUserRankingPosition({
+    id,
+    level,
+    ppTotalEarned,
+    username,
+    xp
+}) {
     const result = db.prepare(`
         SELECT COUNT(*) + 1 AS position
         FROM users
-        WHERE pp > ?
-    `).get(pp);
+        WHERE pp_total_earned > @ppTotalEarned
+           OR (
+                pp_total_earned = @ppTotalEarned
+                AND xp > @xp
+           )
+           OR (
+                pp_total_earned = @ppTotalEarned
+                AND xp = @xp
+                AND level > @level
+           )
+           OR (
+                pp_total_earned = @ppTotalEarned
+                AND xp = @xp
+                AND level = @level
+                AND LOWER(COALESCE(username, '')) < LOWER(@username)
+           )
+           OR (
+                pp_total_earned = @ppTotalEarned
+                AND xp = @xp
+                AND level = @level
+                AND LOWER(COALESCE(username, '')) = LOWER(@username)
+                AND id < @id
+           )
+    `).get({
+        id,
+        level,
+        ppTotalEarned,
+        username: username || "",
+        xp
+    });
 
     return result.position;
 }
@@ -26,6 +60,7 @@ function getProfileData(member) {
     const discordUser = member.user || member;
     const user = getOrCreateUser(member);
     const pp = Number(user.pp) || 0;
+    const ppTotalEarned = Number(user.pp_total_earned ?? user.pp) || 0;
     const xp = Number(user.xp) || 0;
     const level = Number(user.level) || 1;
     const currentStreak = Number(user.current_streak) || 0;
@@ -44,6 +79,7 @@ function getProfileData(member) {
             })
             : null,
         pp,
+        ppTotalEarned,
         xp,
         level,
         rankName: getRank(level),
@@ -51,7 +87,13 @@ function getProfileData(member) {
         currentStreak,
         bestStreak,
         streak: currentStreak,
-        rankingPosition: getUserRankingPosition(pp),
+        rankingPosition: getUserRankingPosition({
+            id: user.id,
+            level,
+            ppTotalEarned,
+            username: user.username,
+            xp
+        }),
         badges: getUserBadges(user.discord_id, 6),
         equipment: getProfileEquipment(db, user.id),
         progress: getCurrentLevelProgress(xp)

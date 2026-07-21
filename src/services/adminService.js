@@ -96,6 +96,7 @@ function rebuildUserStats(discordId) {
     db.prepare(`
         UPDATE users
         SET pp = ?,
+            pp_total_earned = ?,
             xp = ?,
             level = ?,
             missions_completed = ?,
@@ -104,6 +105,7 @@ function rebuildUserStats(discordId) {
             last_submission_date = ?
         WHERE discord_id = ?
     `).run(
+        totals.pp,
         totals.pp,
         totals.xp,
         getLevelFromXP(totals.xp),

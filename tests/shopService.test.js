@@ -585,6 +585,35 @@ test("udany zakup odejmuje PP i dodaje przedmiot do inventory", () => {
     }
 });
 
+test("zakup nie zmienia pp_total_earned używanego przez ranking", () => {
+    const context = createTempShopContext();
+    const member = createMember("buyer-total-earned");
+
+    try {
+        context.setUserPp(member, 1000);
+        context.db.prepare(`
+            UPDATE users
+            SET pp_total_earned = ?
+            WHERE discord_id = ?
+        `).run(1800, member.user.id);
+
+        const item = context.db.prepare(`
+            SELECT *
+            FROM shop_items
+            WHERE code = ?
+        `).get("ramka-neon");
+
+        context.service.purchaseItem(member, "ramka-neon");
+
+        const user = context.getUser(member);
+
+        assert.equal(user.pp, 1000 - item.price);
+        assert.equal(user.pp_total_earned, 1800);
+    } finally {
+        context.close();
+    }
+});
+
 test("brak PP nie zmienia salda ani inventory", () => {
     const { close, getInventoryCount, getUser, service, setUserPp } = createTempShopContext();
     const member = createMember();

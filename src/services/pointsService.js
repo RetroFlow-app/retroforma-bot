@@ -1,6 +1,8 @@
-const db = require("../database/db");
-
 const XP_PER_LEVEL = 250;
+
+function getDefaultDb() {
+    return require("../database/db");
+}
 
 // Pobiera obiekt User z GuildMember albo User.
 function getDiscordUser(member) {
@@ -48,106 +50,129 @@ function getCurrentLevelProgress(xp) {
     };
 }
 
-// Pobiera użytkownika z bazy albo tworzy go przy pierwszym zgłoszeniu.
-function getOrCreateUser(member) {
-    const user = getDiscordUser(member);
-    const username = getUsername(member);
-    const existingUser = db.prepare(`
-        SELECT *
-        FROM users
-        WHERE discord_id = ?
-    `).get(user.id);
-
-    if (existingUser) {
-        db.prepare(`
-            UPDATE users
-            SET username = ?
+function createPointsService(database = getDefaultDb()) {
+    // Pobiera użytkownika z bazy albo tworzy go przy pierwszym zgłoszeniu.
+    function getOrCreateUser(member) {
+        const user = getDiscordUser(member);
+        const username = getUsername(member);
+        const existingUser = database.prepare(`
+            SELECT *
+            FROM users
             WHERE discord_id = ?
-        `).run(username, user.id);
+        `).get(user.id);
+
+        if (existingUser) {
+            database.prepare(`
+                UPDATE users
+                SET username = ?
+                WHERE discord_id = ?
+            `).run(username, user.id);
+
+            return {
+                ...existingUser,
+                username
+            };
+        }
+
+        const createdAt = new Date().toISOString();
+
+        database.prepare(`
+            INSERT INTO users (discord_id, username, created_at)
+            VALUES (?, ?, ?)
+        `).run(user.id, username, createdAt);
+
+        return getUserStats(user.id);
+    }
+
+    // Dodaje PP z misji: saldo rośnie i jednocześnie rośnie rankingowy total earned.
+    function addPoints(member, points) {
+        const user = getOrCreateUser(member);
+        const safePoints = getSafeAmount(points);
+
+        database.prepare(`
+            UPDATE users
+            SET pp = pp + ?,
+                pp_total_earned = pp_total_earned + ?,
+                missions_completed = missions_completed + 1,
+                username = ?
+            WHERE discord_id = ?
+        `).run(safePoints, safePoints, getUsername(member), user.discord_id);
+
+        return getUserStats(user.discord_id);
+    }
+
+    // Dodaje XP niezależnie od PP i zapisuje aktualny poziom w bazie.
+    function addXP(discordId, amount) {
+        let user = getUserStats(discordId);
+        const safeAmount = getSafeAmount(amount);
+
+        if (!user) {
+            database.prepare(`
+                INSERT INTO users (discord_id, username, created_at)
+                VALUES (?, ?, ?)
+            `).run(discordId, "Nieznany użytkownik", new Date().toISOString());
+
+            user = getUserStats(discordId);
+        }
+
+        const previousXp = getSafeAmount(user.xp);
+        const previousLevel = Number(user.level) || getLevelFromXP(previousXp);
+        const totalXp = previousXp + safeAmount;
+        const newLevel = getLevelFromXP(totalXp);
+
+        database.prepare(`
+            UPDATE users
+            SET xp = ?,
+                level = ?
+            WHERE discord_id = ?
+        `).run(totalXp, newLevel, discordId);
 
         return {
-            ...existingUser,
-            username
+            ...getUserStats(discordId),
+            earnedXp: safeAmount,
+            previousLevel,
+            newLevel,
+            leveledUp: newLevel > previousLevel
         };
     }
 
-    const createdAt = new Date().toISOString();
-
-    db.prepare(`
-        INSERT INTO users (discord_id, username, created_at)
-        VALUES (?, ?, ?)
-    `).run(user.id, username, createdAt);
-
-    return db.prepare(`
-        SELECT *
-        FROM users
-        WHERE discord_id = ?
-    `).get(user.id);
-}
-
-// Dodaje Punkty Poligonu i zwiększa licznik ukończonych misji.
-function addPoints(member, points) {
-    const user = getOrCreateUser(member);
-    const safePoints = getSafeAmount(points);
-
-    db.prepare(`
-        UPDATE users
-        SET pp = pp + ?,
-            missions_completed = missions_completed + 1,
-            username = ?
-        WHERE discord_id = ?
-    `).run(safePoints, getUsername(member), user.discord_id);
-
-    return getUserStats(user.discord_id);
-}
-
-// Dodaje XP niezależnie od PP i zapisuje aktualny poziom w bazie.
-function addXP(discordId, amount) {
-    let user = getUserStats(discordId);
-    const safeAmount = getSafeAmount(amount);
-
-    if (!user) {
-        db.prepare(`
-            INSERT INTO users (discord_id, username, created_at)
-            VALUES (?, ?, ?)
-        `).run(discordId, "Nieznany użytkownik", new Date().toISOString());
-
-        user = getUserStats(discordId);
+    // Pobiera statystyki użytkownika po Discord ID.
+    function getUserStats(discordId) {
+        return database.prepare(`
+            SELECT *
+            FROM users
+            WHERE discord_id = ?
+        `).get(discordId);
     }
 
-    const previousXp = getSafeAmount(user.xp);
-    const previousLevel = Number(user.level) || getLevelFromXP(previousXp);
-    const totalXp = previousXp + safeAmount;
-    const newLevel = getLevelFromXP(totalXp);
-
-    db.prepare(`
-        UPDATE users
-        SET xp = ?,
-            level = ?
-        WHERE discord_id = ?
-    `).run(totalXp, newLevel, discordId);
-
     return {
-        ...getUserStats(discordId),
-        earnedXp: safeAmount,
-        previousLevel,
-        newLevel,
-        leveledUp: newLevel > previousLevel
+        addPoints,
+        addXP,
+        getOrCreateUser,
+        getUserStats
     };
 }
 
-// Pobiera statystyki użytkownika po Discord ID.
+function addPoints(member, points) {
+    return createPointsService().addPoints(member, points);
+}
+
+function addXP(discordId, amount) {
+    return createPointsService().addXP(discordId, amount);
+}
+
+function getOrCreateUser(member) {
+    return createPointsService().getOrCreateUser(member);
+}
+
 function getUserStats(discordId) {
-    return db.prepare(`
-        SELECT *
-        FROM users
-        WHERE discord_id = ?
-    `).get(discordId);
+    return createPointsService().getUserStats(discordId);
 }
 
 module.exports = {
     addXP,
     addPoints,
+    createPointsService,
     getCurrentLevelProgress,
     getLevelFromXP,
     getOrCreateUser,

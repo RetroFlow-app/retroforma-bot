@@ -17,7 +17,7 @@ async function logSubmission(client, message, submission) {
             "",
             `⭐ Zdobyte XP: ${submission.earnedXp}`,
             "",
-            `🏁 Łącznie PP: ${submission.totalPp}`,
+            `🏁 Łącznie zdobyte PP: ${submission.totalPp}`,
             "",
             `📈 Łącznie XP: ${submission.totalXp}`,
             "",
