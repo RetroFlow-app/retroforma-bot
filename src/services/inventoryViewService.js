@@ -101,12 +101,12 @@ function createNavigationRow(userId, viewModel) {
 
     return new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-            .setCustomId(createInventoryCustomId(["page", userId, viewModel.category, previousPage]))
+            .setCustomId(createInventoryCustomId(["page", userId, viewModel.category, previousPage, "previous"]))
             .setLabel("Wstecz")
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(viewModel.page <= 0),
         new ButtonBuilder()
-            .setCustomId(createInventoryCustomId(["page", userId, viewModel.category, nextPage]))
+            .setCustomId(createInventoryCustomId(["page", userId, viewModel.category, nextPage, "next"]))
             .setLabel("Dalej")
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(viewModel.page >= viewModel.totalPages - 1)
@@ -198,6 +198,11 @@ function createInventoryPayloadFromView(member, viewModel) {
         totalBadges: viewModel.totalBadges,
         totalShopItems: viewModel.totalShopItems
     });
+
+    if (!Buffer.isBuffer(imageBuffer)) {
+        throw new Error("Renderer ekwipunku nie zwrocil poprawnego Buffer PNG.");
+    }
+
     const attachment = new AttachmentBuilder(imageBuffer, {
         name: "retroforma-ekwipunek.png"
     });

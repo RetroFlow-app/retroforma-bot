@@ -7,6 +7,8 @@ const {
     equipInventoryItem
 } = require("../services/inventoryService");
 
+const INVENTORY_COMPONENT_ERROR_MESSAGE = "Nie udało się odświeżyć ekwipunku. Spróbuj ponownie za chwilę.";
+
 function getInteractionMember(interaction) {
     return interaction.member || interaction.user;
 }
@@ -33,7 +35,8 @@ function getEquipmentErrorMessage(error) {
 async function handleCategorySelect(interaction) {
     const selectedCategory = interaction.values[0] || "all";
 
-    await interaction.update(
+    await interaction.deferUpdate();
+    await interaction.editReply(
         createInventoryPayload(getInteractionMember(interaction), {
             category: selectedCategory,
             page: 0
@@ -42,7 +45,8 @@ async function handleCategorySelect(interaction) {
 }
 
 async function handlePageButton(interaction, inventoryInteraction) {
-    await interaction.update(
+    await interaction.deferUpdate();
+    await interaction.editReply(
         createInventoryPayload(getInteractionMember(interaction), {
             category: inventoryInteraction.category,
             page: inventoryInteraction.page
@@ -53,23 +57,26 @@ async function handlePageButton(interaction, inventoryInteraction) {
 async function handleEquipSelect(interaction, inventoryInteraction) {
     const itemCode = interaction.values[0];
 
+    await interaction.deferUpdate();
+
     try {
         equipInventoryItem(getInteractionMember(interaction), itemCode, {
             expectedSlot: inventoryInteraction.slot
         });
     } catch (error) {
         if (!error.code || !Object.values(EQUIPMENT_ERRORS).includes(error.code)) {
-            console.error(`Błąd wyposażania ekwipunku: ${error.message}`);
+            console.error("[INVENTORY] equip error");
+            console.error(error?.stack || String(error));
         }
 
-        await interaction.reply({
+        await interaction.followUp({
             content: getEquipmentErrorMessage(error),
             ephemeral: true
         });
         return;
     }
 
-    await interaction.update(
+    await interaction.editReply(
         createInventoryPayload(getInteractionMember(interaction), {
             category: inventoryInteraction.category,
             page: inventoryInteraction.page
@@ -93,18 +100,37 @@ async function handleInventoryInteraction(interaction) {
         return true;
     }
 
-    if (inventoryInteraction.action === "category" && interaction.isStringSelectMenu()) {
-        await handleCategorySelect(interaction);
-        return true;
-    }
+    try {
+        if (inventoryInteraction.action === "category" && interaction.isStringSelectMenu()) {
+            await handleCategorySelect(interaction);
+            return true;
+        }
 
-    if (inventoryInteraction.action === "page" && interaction.isButton()) {
-        await handlePageButton(interaction, inventoryInteraction);
-        return true;
-    }
+        if (inventoryInteraction.action === "page" && interaction.isButton()) {
+            await handlePageButton(interaction, inventoryInteraction);
+            return true;
+        }
 
-    if (inventoryInteraction.action === "equip" && interaction.isStringSelectMenu()) {
-        await handleEquipSelect(interaction, inventoryInteraction);
+        if (inventoryInteraction.action === "equip" && interaction.isStringSelectMenu()) {
+            await handleEquipSelect(interaction, inventoryInteraction);
+            return true;
+        }
+    } catch (error) {
+        console.error("[INVENTORY] component error");
+        console.error(error?.stack || String(error));
+
+        if (interaction.deferred || interaction.replied) {
+            await interaction.followUp({
+                content: INVENTORY_COMPONENT_ERROR_MESSAGE,
+                ephemeral: true
+            });
+        } else {
+            await interaction.reply({
+                content: INVENTORY_COMPONENT_ERROR_MESSAGE,
+                ephemeral: true
+            });
+        }
+
         return true;
     }
 
