@@ -2,6 +2,7 @@ const {
     INITIAL_SHOP_ITEMS,
     REMOVED_SHOP_ITEM_CODES
 } = require("./shopSeedData");
+const { normalizeRarity } = require("../utils/rarity");
 
 // Sprawdza, czy tabela ma już wskazaną kolumnę.
 function hasColumn(db, tableName, columnName) {
@@ -112,6 +113,7 @@ function seedShopItems(db) {
     for (const item of INITIAL_SHOP_ITEMS) {
         statement.run({
             ...item,
+            rarity: normalizeRarity(item.rarity),
             createdAt
         });
     }
@@ -131,6 +133,42 @@ function syncShopItemCategories(db) {
         statement.run({
             category: item.category,
             code: item.code
+        });
+    }
+}
+
+// Normalizuje stare poziomy rzadkosci do trzech wspieranych wartosci.
+// Zmienia tylko pole rarity w shop_items i nie narusza zakupow ani wyposazenia.
+function syncShopItemRarities(db) {
+    const seedStatement = db.prepare(`
+        UPDATE shop_items
+        SET rarity = @rarity
+        WHERE code = @code
+          AND rarity <> @rarity
+    `);
+
+    for (const item of INITIAL_SHOP_ITEMS) {
+        seedStatement.run({
+            code: item.code,
+            rarity: normalizeRarity(item.rarity)
+        });
+    }
+
+    const itemRows = db.prepare(`
+        SELECT id, rarity
+        FROM shop_items
+    `).all();
+    const normalizeStatement = db.prepare(`
+        UPDATE shop_items
+        SET rarity = @rarity
+        WHERE id = @id
+          AND rarity <> @rarity
+    `);
+
+    for (const row of itemRows) {
+        normalizeStatement.run({
+            id: row.id,
+            rarity: normalizeRarity(row.rarity)
         });
     }
 }
@@ -271,6 +309,19 @@ function initializeDatabase(db) {
             updated_at TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS admin_point_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            target_user_id INTEGER NOT NULL,
+            target_discord_id TEXT NOT NULL,
+            admin_discord_id TEXT NOT NULL,
+            operation TEXT NOT NULL,
+            amount INTEGER NOT NULL,
+            balance_before INTEGER NOT NULL,
+            balance_after INTEGER NOT NULL,
+            reason TEXT,
+            created_at TEXT
+        );
+
         CREATE TABLE IF NOT EXISTS shop_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             code TEXT UNIQUE NOT NULL,
@@ -312,6 +363,12 @@ function initializeDatabase(db) {
         CREATE INDEX IF NOT EXISTS idx_mission_publications_message_id
             ON mission_publications (message_id);
 
+        CREATE INDEX IF NOT EXISTS idx_admin_point_transactions_target_discord_id
+            ON admin_point_transactions (target_discord_id);
+
+        CREATE INDEX IF NOT EXISTS idx_admin_point_transactions_created_at
+            ON admin_point_transactions (created_at);
+
         CREATE INDEX IF NOT EXISTS idx_shop_items_category_active
             ON shop_items (category, active);
 
@@ -330,6 +387,7 @@ function initializeDatabase(db) {
     syncTerminalShopItemCode(db);
     seedShopItems(db);
     syncShopItemCategories(db);
+    syncShopItemRarities(db);
     disableRemovedShopItems(db);
 }
 
@@ -337,6 +395,7 @@ module.exports = {
     disableRemovedShopItems,
     seedShopItems,
     syncShopItemCategories,
+    syncShopItemRarities,
     syncTerminalShopItemCode,
     initializeDatabase
 };

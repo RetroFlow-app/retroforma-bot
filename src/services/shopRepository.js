@@ -2,6 +2,8 @@ function getDefaultDb() {
     return require("../database/db");
 }
 
+const { normalizeRarity } = require("../utils/rarity");
+
 function mapShopItem(row) {
     if (!row) {
         return null;
@@ -17,7 +19,7 @@ function mapShopItem(row) {
         category: row.category,
         price: parsedPrice,
         rawPrice: row.price,
-        rarity: row.rarity,
+        rarity: normalizeRarity(row.rarity),
         active: row.active === 1,
         createdAt: row.created_at
     };

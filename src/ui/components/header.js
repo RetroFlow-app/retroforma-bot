@@ -11,7 +11,9 @@ function drawAppHeader(ctx, options = {}) {
     const {
         playerPP = 0,
         subtitle = "KATALOG NAGROD ZA PP",
-        title = "RETROFORMA SKLEP"
+        title = "RETROFORMA SKLEP",
+        titleMaxWidth = 570,
+        titleSize = 46
     } = options;
 
     const headerGradient = createLinearGradient(ctx, 42, 26, 1238, 106, [
@@ -28,11 +30,11 @@ function drawAppHeader(ctx, options = {}) {
     ctx.fillStyle = COLORS.amber;
     ctx.fillText("RETROFORMA", 78, 58);
 
-    setFont(ctx, 46, "800");
+    setFont(ctx, titleSize, "800");
     ctx.fillStyle = COLORS.text;
     ctx.shadowColor = "rgba(77, 255, 154, 0.34)";
     ctx.shadowBlur = 14;
-    drawFittedText(ctx, title, 78, 101, 570);
+    drawFittedText(ctx, title, 78, 101, titleMaxWidth);
     ctx.shadowBlur = 0;
 
     setFont(ctx, 16, "700");

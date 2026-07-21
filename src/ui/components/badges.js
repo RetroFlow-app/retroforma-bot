@@ -4,41 +4,28 @@ const {
     setFont,
     strokeRoundedRect
 } = require("../renderer");
+const { normalizeRarity } = require("../../utils/rarity");
 
 const RARITY_STYLES = {
     "podstawowa": {
-        accent: COLORS.neutral,
+        accent: COLORS.green,
         label: "Podstawowa",
         tier: 1
-    },
-    "niepospolita": {
-        accent: COLORS.green,
-        label: "Niepospolita",
-        tier: 2
-    },
-    "rzadka": {
-        accent: COLORS.blue,
-        label: "Rzadka",
-        tier: 3
     },
     "epicka": {
         accent: COLORS.purple,
         label: "Epicka",
-        tier: 4
+        tier: 2
     },
     "legendarna": {
         accent: COLORS.amber,
         label: "Legendarna",
-        tier: 5
+        tier: 3
     }
 };
 
-function normalizeRarity(rarity) {
-    return String(rarity || "Podstawowa").trim().toLowerCase();
-}
-
 function getRarityStyle(rarity) {
-    return RARITY_STYLES[normalizeRarity(rarity)] || RARITY_STYLES.podstawowa;
+    return RARITY_STYLES[normalizeRarity(rarity).toLowerCase()] || RARITY_STYLES.podstawowa;
 }
 
 function drawRarityMarks(ctx, x, y, tier, color) {
@@ -106,5 +93,6 @@ module.exports = {
     drawPriceBadge,
     drawRarityBadge,
     drawRarityMarks,
-    getRarityStyle
+    getRarityStyle,
+    normalizeRarity
 };

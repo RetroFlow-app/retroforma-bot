@@ -1,6 +1,6 @@
 const CARD_WIDTH = 1200;
 const CARD_HEIGHT = 675;
-const FALLBACK_FONT = "Segoe UI";
+const FALLBACK_FONT = "\"DejaVu Sans\", \"Noto Sans\", \"Liberation Sans\", \"Segoe UI\", \"Arial\", sans-serif";
 let activeFontFamily = FALLBACK_FONT;
 
 const {
@@ -40,7 +40,7 @@ async function loadCanvasContext(profile) {
     const canvasApi = loadCanvas();
     const registeredFontFamily = registerProfileFont(canvasApi.registerFont);
 
-    activeFontFamily = registeredFontFamily || FALLBACK_FONT;
+    activeFontFamily = registeredFontFamily ? `"${registeredFontFamily}", ${FALLBACK_FONT}` : FALLBACK_FONT;
 
     return {
         ...canvasApi,

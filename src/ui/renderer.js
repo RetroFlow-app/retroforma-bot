@@ -8,6 +8,7 @@ try {
 
 const UI_WIDTH = 1280;
 const UI_HEIGHT = 720;
+const UI_FONT_STACK = "\"DejaVu Sans\", \"Noto Sans\", \"Liberation Sans\", \"Segoe UI\", \"Arial\", \"Noto Color Emoji\", \"Segoe UI Emoji\", sans-serif";
 
 const COLORS = {
     background: "#050908",
@@ -66,7 +67,7 @@ function renderPng(draw, options = {}) {
     return surface.canvas.toBuffer("image/png");
 }
 
-function setFont(ctx, size, weight = "400", family = "Arial") {
+function setFont(ctx, size, weight = "400", family = UI_FONT_STACK) {
     ctx.font = `${weight} ${size}px ${family}`;
 }
 
@@ -274,6 +275,7 @@ function drawBackground(ctx, width, height) {
 module.exports = {
     COLORS,
     UI_HEIGHT,
+    UI_FONT_STACK,
     UI_WIDTH,
     createLinearGradient,
     createUiCanvas,
