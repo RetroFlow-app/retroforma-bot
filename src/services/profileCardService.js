@@ -6,7 +6,7 @@ const PROFILE_AVATAR_BOUNDS = {
     width: 160,
     height: 160
 };
-const PROFILE_AVATAR_FRAME_PADDING = 8;
+const PROFILE_AVATAR_FRAME_PADDING = 17;
 const PROFILE_THEME_OVERLAY_MAX_ALPHA = 0.42;
 const FALLBACK_FONT = "\"DejaVu Sans\", \"Noto Sans\", \"Liberation Sans\", \"Segoe UI\", \"Arial\", sans-serif";
 let activeFontFamily = FALLBACK_FONT;
@@ -391,7 +391,7 @@ function getAvatarLayout() {
     const radius = Math.min(PROFILE_AVATAR_BOUNDS.width, PROFILE_AVATAR_BOUNDS.height) / 2 - 16;
     const frameSize = Math.min(
         PROFILE_AVATAR_BOUNDS.width + PROFILE_AVATAR_FRAME_PADDING * 2,
-        176
+        194
     );
 
     return {
