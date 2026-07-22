@@ -333,6 +333,16 @@ function initializeDatabase(db) {
             created_at TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS admin_reset_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            target_user_id INTEGER NOT NULL,
+            target_discord_id TEXT NOT NULL,
+            admin_discord_id TEXT NOT NULL,
+            scope TEXT NOT NULL,
+            reason TEXT,
+            created_at TEXT
+        );
+
         CREATE TABLE IF NOT EXISTS shop_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             code TEXT UNIQUE NOT NULL,
@@ -379,6 +389,12 @@ function initializeDatabase(db) {
 
         CREATE INDEX IF NOT EXISTS idx_admin_point_transactions_created_at
             ON admin_point_transactions (created_at);
+
+        CREATE INDEX IF NOT EXISTS idx_admin_reset_transactions_target_discord_id
+            ON admin_reset_transactions (target_discord_id);
+
+        CREATE INDEX IF NOT EXISTS idx_admin_reset_transactions_created_at
+            ON admin_reset_transactions (created_at);
 
         CREATE INDEX IF NOT EXISTS idx_shop_items_category_active
             ON shop_items (category, active);

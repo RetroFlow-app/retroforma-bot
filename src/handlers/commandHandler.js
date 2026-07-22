@@ -1,6 +1,7 @@
 const config = require("../config/appConfig");
 const adminPanel = require("../commands/adminCommands");
 const adminPointsPanel = require("../commands/adminPointsCommands");
+const adminResetAccountPanel = require("../commands/adminResetAccountCommand");
 const inventoryCommand = require("../commands/inventoryCommand");
 const pointsCommand = require("../commands/pointsCommand");
 const profileCommand = require("../commands/profileCommand");
@@ -27,7 +28,8 @@ const commands = [
     inventoryCommand,
     shopCommand,
     ...adminPanel.commands,
-    ...adminPointsPanel.commands
+    ...adminPointsPanel.commands,
+    ...adminResetAccountPanel.commands
 ];
 
 // Usuwa stare globalne komendy, żeby /profil działał wyłącznie jako Guild Command.
@@ -252,6 +254,10 @@ function registerCommandHandler(client) {
             }
 
             if (await adminPanel.handleAdminButton(interaction)) {
+                return;
+            }
+
+            if (await adminResetAccountPanel.handleAdminResetButton(interaction)) {
                 return;
             }
 

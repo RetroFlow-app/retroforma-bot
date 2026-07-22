@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "import:missions": "node scripts/importMissions.js",
-    "test": "node --test tests/missionScheduler.test.js tests/databaseInitialization.test.js tests/missionDiscordService.test.js tests/shopService.test.js tests/uiRenderer.test.js tests/inventoryCommand.test.js tests/profileEquipment.test.js tests/adminPointsCommand.test.js tests/pointsTotalEarned.test.js"
+    "test": "node --test tests/missionScheduler.test.js tests/databaseInitialization.test.js tests/missionDiscordService.test.js tests/shopService.test.js tests/uiRenderer.test.js tests/inventoryCommand.test.js tests/profileEquipment.test.js tests/adminPointsCommand.test.js tests/adminResetAccountCommand.test.js tests/pointsCommand.test.js tests/pointsTotalEarned.test.js"
   },
   "keywords": [],
   "author": "",
