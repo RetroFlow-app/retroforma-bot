@@ -1,84 +1,95 @@
 const { SlashCommandBuilder } = require("discord.js");
 
 const { getOrCreateUser } = require("../services/pointsService");
+const { createInventoryRepository } = require("../services/inventoryRepository");
+const { createShopRepository } = require("../services/shopRepository");
 const { createInfoEmbed } = require("../utils/embedFactory");
-
-const NEXT_PP_GOAL = {
-    name: "Brązowa ramka profilu",
-    cost: 500
-};
-const PROGRESS_BAR_SEGMENTS = 10;
 
 function getSafeNumber(value) {
     return Math.max(0, Number(value) || 0);
 }
 
-// Buduje prosty pasek postępu z 10 segmentów dla celu PP.
-function createProgressBar(currentValue, targetValue) {
-    const safeTarget = Math.max(1, targetValue);
-    const progress = Math.min(1, getSafeNumber(currentValue) / safeTarget);
-    const filledSegments = Math.floor(progress * PROGRESS_BAR_SEGMENTS);
-    const emptySegments = PROGRESS_BAR_SEGMENTS - filledSegments;
+function sortItemsByGoalPriority(firstItem, secondItem) {
+    const priceDifference = getSafeNumber(firstItem.price) - getSafeNumber(secondItem.price);
 
-    return "█".repeat(filledSegments) + "░".repeat(emptySegments);
+    if (priceDifference !== 0) {
+        return priceDifference;
+    }
+
+    return String(firstItem.name || "").localeCompare(String(secondItem.name || ""), "pl");
 }
 
-// Pokazuje stały najbliższy cel, który przygotowuje użytkownika na przyszłe nagrody.
-function createGoalDescription(pp) {
-    const missingPp = Math.max(0, NEXT_PP_GOAL.cost - pp);
-    const progressBar = createProgressBar(pp, NEXT_PP_GOAL.cost);
-    const progressLine = `${progressBar} ${Math.min(pp, NEXT_PP_GOAL.cost)} / ${NEXT_PP_GOAL.cost} PP`;
+// Znajduje najtańszy aktywny przedmiot, którego użytkownik jeszcze nie posiada.
+function findNextPpGoal(userStats, options = {}) {
+    const shopRepository = options.shopRepository || createShopRepository(options.db);
+    const inventoryRepository = options.inventoryRepository || createInventoryRepository(options.db);
+    const ownedItemIds = userStats.id
+        ? inventoryRepository.getOwnedItemIds(userStats.id)
+        : new Set();
+    const activeItems = shopRepository.getActiveItems("all")
+        .filter((item) => item.active && Number.isSafeInteger(item.price) && item.price >= 0)
+        .filter((item) => !ownedItemIds.has(item.id))
+        .sort(sortItemsByGoalPriority);
 
-    if (pp >= NEXT_PP_GOAL.cost) {
+    if (activeItems.length === 0) {
+        return {
+            complete: true
+        };
+    }
+
+    return {
+        complete: false,
+        item: activeItems[0]
+    };
+}
+
+function createGoalDescription(pp, nextGoal) {
+    if (!nextGoal || nextGoal.complete) {
         return [
-            "🖼 Brązowa ramka profilu",
-            `Koszt: ${NEXT_PP_GOAL.cost} PP`,
+            "🏆 Gratulacje!",
             "",
-            "Postęp:",
-            progressLine,
-            "",
-            "✅ Możesz odblokować tę nagrodę po otwarciu Arsenału!"
+            "Posiadasz wszystkie aktualnie dostępne przedmioty.",
+            "Czekaj na kolejne aktualizacje sklepu."
         ].join("\n");
     }
 
+    const item = nextGoal.item;
+    const price = getSafeNumber(item.price);
+    const missingPp = Math.max(0, price - pp);
+
     return [
-        "🖼 Brązowa ramka profilu",
-        `Koszt: ${NEXT_PP_GOAL.cost} PP`,
+        item.name,
         "",
-        "Postęp:",
-        progressLine,
-        "",
-        "Brakuje:",
-        `${missingPp} PP`
+        `Koszt: ${price} PP`,
+        `Aktualne PP: ${pp}`,
+        `Brakuje: ${missingPp} PP`
     ].join("\n");
 }
 
 // Buduje czytelne podsumowanie Punktów Poligonu dla jednego użytkownika.
-function createPointsSummaryEmbed(userStats) {
+function createPointsSummaryEmbed(userStats, options = {}) {
     const pp = getSafeNumber(userStats.pp);
     const ppTotalEarned = getSafeNumber(userStats.pp_total_earned ?? userStats.pp);
     const xp = getSafeNumber(userStats.xp);
     const level = Math.max(1, Number(userStats.level) || 1);
     const missionsCompleted = getSafeNumber(userStats.missions_completed);
+    const nextGoal = options.nextGoal || findNextPpGoal(userStats, options);
     const description = [
-        "🏅 **Punkty Poligonu (PP)** to oficjalna waluta **Poligonu CAD**.",
+        "🪙 **Punkty Poligonu (PP)** to oficjalna waluta **RetroForma Poligon**.",
         "",
-        "Zdobywasz je za każdą **zaakceptowaną misję**.",
+        "Zdobywasz je za zaakceptowane misje.",
         "",
-        "🪖 Już wkrótce otworzy się **Arsenał Poligonu**, w którym wykorzystasz PP do odblokowania:",
+        "Możesz wydawać je w **/sklep**.",
         "",
-        "🎨 Unikalnych teł profilu",
+        "🛍️ **Za Punkty Poligonu kupisz między innymi:**",
         "",
-        "🖼 Ekskluzywnych ramek",
+        "🎨 Tła profilu",
         "",
-        "🏅 Specjalnych odznak",
+        "🖼️ Ramki avatara",
         "",
-        "🎁 Nagród i wydarzeń specjalnych",
+        "🎒 Gadżety kolekcjonerskie",
         "",
-        "━━━━━━━━━━━━━━━━━━━━━━",
-        "",
-        "💡 **Zbieraj PP już teraz!**",
-        "Od dnia otwarcia Arsenału będą miały realną wartość."
+        "🏅 W przyszłości limitowane przedmioty i nagrody sezonowe."
     ].join("\n");
 
     return createInfoEmbed({
@@ -111,22 +122,17 @@ function createPointsSummaryEmbed(userStats) {
                 inline: true
             },
             {
-                name: "🪖 Arsenał",
-                value: "wkrótce",
-                inline: true
-            },
-            {
-                name: "🎯 Najbliższy cel",
-                value: createGoalDescription(pp),
+                name: "🎯 Następny cel",
+                value: createGoalDescription(pp, nextGoal),
                 inline: false
             },
             {
-                name: "🚀 Następna aktualizacja",
+                name: "💡 Przydatne komendy",
                 value: [
-                    "🪖 Arsenał Poligonu",
-                    "",
-                    "**Status:**",
-                    "🔨 W przygotowaniu"
+                    "🛍️ /sklep",
+                    "🎒 /ekwipunek",
+                    "👤 /profil",
+                    "🏆 /ranking"
                 ].join("\n"),
                 inline: false
             }
@@ -137,18 +143,22 @@ function createPointsSummaryEmbed(userStats) {
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("punkty")
-        .setDescription("Sprawdź swoje Punkty Poligonu i status Arsenału."),
+        .setDescription("Sprawdź swoje Punkty Poligonu."),
 
-    // Pokazuje użytkownikowi jego PP bez dodawania zakupów ani Arsenału.
-    async execute(interaction) {
+    // Pokazuje użytkownikowi saldo PP i najbliższy realny cel sklepowy.
+    async execute(interaction, dependencies = {}) {
         const member = interaction.member || interaction.user;
-        const userStats = getOrCreateUser(member);
+        const userStats = (dependencies.getOrCreateUser || getOrCreateUser)(member);
 
         await interaction.reply({
             embeds: [
-                createPointsSummaryEmbed(userStats)
+                createPointsSummaryEmbed(userStats, dependencies)
             ],
             ephemeral: true
         });
     }
 };
+
+module.exports.createGoalDescription = createGoalDescription;
+module.exports.createPointsSummaryEmbed = createPointsSummaryEmbed;
+module.exports.findNextPpGoal = findNextPpGoal;
