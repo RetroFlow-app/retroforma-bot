@@ -387,9 +387,12 @@ test("avatarBounds miesci ramke avatara ponizej naglowka lewego panelu", () => {
     });
     assert.equal(layout.centerX, 215);
     assert.equal(layout.centerY, 222);
-    assert.ok(layout.frameBounds.y >= 134);
-    assert.ok(layout.frameBounds.y > 124);
-    assert.ok(layout.frameBounds.y + layout.frameBounds.height < 318);
+    assert.deepEqual(layout.frameBounds, {
+        x: 118,
+        y: 125,
+        width: 194,
+        height: 194
+    });
 });
 
 test("brak ramki nadal pokazuje avatar i standardowa obwodke", async () => {
