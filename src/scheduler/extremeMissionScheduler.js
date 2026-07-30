@@ -3,6 +3,7 @@ const cron = require("node-cron");
 const {
     closeActiveExtremeMission,
     getExtremeMissionCatalog,
+    getExtremeTestMissionImagePath,
     publishOneTimeExtremeTestMission,
     publishNextExtremeMission,
     validateExtremeMissionCatalog
@@ -12,8 +13,8 @@ const { createExtremeMissionRepository } = require("../services/extremeMissionRe
 const EXTREME_TIMEZONE = "Europe/Warsaw";
 const WEDNESDAY_SHORT_NAME = "Wed";
 const EXTREME_TEST_PUBLISH_DATE_KEY = "2026-07-30";
-const EXTREME_TEST_PUBLISH_MINUTE_OF_DAY = 20 * 60;
-const EXTREME_TEST_PUBLISH_STATE_KEY = "EXTREME_TEST_000_2026-07-30_20:00";
+const EXTREME_TEST_PUBLISH_MINUTE_OF_DAY = 21 * 60;
+const EXTREME_TEST_PUBLISH_STATE_KEY = "EXTREME_TEST_000_2026-07-30_21:00";
 let isExtremeSchedulerRunning = false;
 
 function logExtremeScheduler(message, data = null) {
@@ -79,6 +80,19 @@ function shouldPublishOneTimeExtremeTestMission(state, now = new Date()) {
     return parts.dateKey === EXTREME_TEST_PUBLISH_DATE_KEY
         && parts.minuteOfDay >= EXTREME_TEST_PUBLISH_MINUTE_OF_DAY
         && state.last_publish_date !== EXTREME_TEST_PUBLISH_STATE_KEY;
+}
+
+function getOneTimeExtremeTestStartupStatus(state, now = new Date()) {
+    const parts = getWarsawDateParts(now);
+    const alreadyPublished = state.last_publish_date === EXTREME_TEST_PUBLISH_STATE_KEY;
+    const isTestDay = parts.dateKey === EXTREME_TEST_PUBLISH_DATE_KEY;
+    const isBeforeTestTime = isTestDay && parts.minuteOfDay < EXTREME_TEST_PUBLISH_MINUTE_OF_DAY;
+
+    return {
+        alreadyPublished,
+        shouldPublishAtStartup: shouldPublishOneTimeExtremeTestMission(state, now),
+        waitsForCronAt21: !alreadyPublished && isBeforeTestTime
+    };
 }
 
 async function checkExtremeMissions(client, now = new Date(), dependencies = {}) {
@@ -149,36 +163,53 @@ async function checkExtremeMissions(client, now = new Date(), dependencies = {})
 }
 
 function startExtremeMissionScheduler(client, dependencies = {}) {
+    const repository = dependencies.repository || createExtremeMissionRepository(dependencies.db);
+    const schedulerDependencies = {
+        ...dependencies,
+        repository
+    };
+
     logExtremeScheduler("Start schedulera Misji EXTREME.", {
         botId: client.user?.id || null,
         isReady: typeof client.isReady === "function" ? client.isReady() : null,
         timezone: EXTREME_TIMEZONE
     });
 
-    const catalog = (dependencies.getExtremeMissionCatalog || getExtremeMissionCatalog)(dependencies);
+    const catalog = (schedulerDependencies.getExtremeMissionCatalog || getExtremeMissionCatalog)(schedulerDependencies);
+    const state = repository.getState();
+    const testImagePath = (schedulerDependencies.getExtremeTestMissionImagePath || getExtremeTestMissionImagePath)(schedulerDependencies);
+    const startupTestStatus = getOneTimeExtremeTestStartupStatus(state, new Date());
 
     logExtremeScheduler("Katalog grafik Misji EXTREME.", {
         cwd: process.cwd(),
-        jpgCount: catalog.missions.length,
-        jpgFiles: catalog.missions.map((mission) => mission.fileName),
-        rootPath: catalog.rootPath
+        jpgCount: catalog.jpgFiles?.length || catalog.missions.length,
+        jpgFiles: catalog.jpgFiles || catalog.missions.map((mission) => mission.fileName),
+        rootPath: catalog.rootPath,
+        testImageDetected: Boolean(testImagePath),
+        testImagePath
     });
 
-    validateExtremeMissionCatalog(catalog, dependencies.logger || console);
+    logExtremeScheduler("Stan jednorazowej Misji EXTREME #000.", {
+        alreadyPublished: startupTestStatus.alreadyPublished,
+        shouldPublishAtStartup: startupTestStatus.shouldPublishAtStartup,
+        waitsForCronAt21: startupTestStatus.waitsForCronAt21
+    });
 
-    checkExtremeMissions(client, new Date(), dependencies).catch((error) => {
+    validateExtremeMissionCatalog(catalog, schedulerDependencies.logger || console);
+
+    checkExtremeMissions(client, new Date(), schedulerDependencies).catch((error) => {
         logExtremeSchedulerError("Błąd początkowego sprawdzania Misji EXTREME.", error);
     });
 
     logExtremeScheduler("Rejestruję jednorazowy cron testowy Misji EXTREME #000.", {
-        expression: "0 20 30 7 *",
-        publishAt: "2026-07-30 20:00 Europe/Warsaw"
+        expression: "0 21 30 7 *",
+        publishAt: "2026-07-30 21:00 Europe/Warsaw"
     });
     cron.schedule(
-        "0 20 30 7 *",
+        "0 21 30 7 *",
         () => {
             logExtremeScheduler("Wywołano callback jednorazowego crona testowego #000.");
-            checkExtremeMissions(client, new Date(), dependencies).catch((error) => {
+            checkExtremeMissions(client, new Date(), schedulerDependencies).catch((error) => {
                 logExtremeSchedulerError("Błąd testowej publikacji Misji EXTREME #000.", error);
             });
         },
@@ -191,7 +222,7 @@ function startExtremeMissionScheduler(client, dependencies = {}) {
         "0 15 * * 3",
         () => {
             logExtremeScheduler("Wywołano callback crona zamknięcia Misji EXTREME.");
-            checkExtremeMissions(client, new Date(), dependencies).catch((error) => {
+            checkExtremeMissions(client, new Date(), schedulerDependencies).catch((error) => {
                 logExtremeSchedulerError("Błąd zamykania Misji EXTREME.", error);
             });
         },
@@ -204,7 +235,7 @@ function startExtremeMissionScheduler(client, dependencies = {}) {
         "0 16 * * 3",
         () => {
             logExtremeScheduler("Wywołano callback crona publikacji regularnej Misji EXTREME.");
-            checkExtremeMissions(client, new Date(), dependencies).catch((error) => {
+            checkExtremeMissions(client, new Date(), schedulerDependencies).catch((error) => {
                 logExtremeSchedulerError("Błąd publikacji Misji EXTREME.", error);
             });
         },
@@ -220,6 +251,7 @@ module.exports = {
     checkExtremeMissions,
     EXTREME_TEST_PUBLISH_DATE_KEY,
     EXTREME_TEST_PUBLISH_STATE_KEY,
+    getOneTimeExtremeTestStartupStatus,
     getWarsawDateParts,
     shouldPublishOneTimeExtremeTestMission,
     shouldCloseExtremeMission,

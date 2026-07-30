@@ -84,6 +84,31 @@ function getMissionNumberFromJpgFile(fileName) {
     return Number.isSafeInteger(missionNumber) && missionNumber > 0 ? missionNumber : null;
 }
 
+function getNumericJpgFiles(entries) {
+    return entries
+        .filter((entry) => entry.isFile())
+        .map((entry) => {
+            const match = /^(\d+)\.jpg$/i.exec(entry.name);
+
+            if (!match) {
+                return null;
+            }
+
+            const number = Number(match[1]);
+
+            if (!Number.isSafeInteger(number) || number < 0) {
+                return null;
+            }
+
+            return {
+                fileName: entry.name,
+                number
+            };
+        })
+        .filter(Boolean)
+        .sort((firstFile, secondFile) => firstFile.number - secondFile.number);
+}
+
 function getExtremeTestMissionImagePath(options = {}) {
     const fileSystem = options.fs || fs;
     const roots = options.assetRoots || getExtremeMissionAssetRoots();
@@ -130,9 +155,11 @@ function readExtremeMissionCatalogFromRoot(rootPath, fileSystem = fs) {
             };
         }
 
-        const missions = fileSystem.readdirSync(rootPath, {
+        const entries = fileSystem.readdirSync(rootPath, {
             withFileTypes: true
-        })
+        });
+        const jpgFiles = getNumericJpgFiles(entries);
+        const missions = entries
             .filter((entry) => entry.isFile())
             .map((entry) => {
                 const missionNumber = getMissionNumberFromJpgFile(entry.name);
@@ -152,6 +179,7 @@ function readExtremeMissionCatalogFromRoot(rootPath, fileSystem = fs) {
 
         return {
             exists: true,
+            jpgFiles: jpgFiles.map((file) => file.fileName),
             missions,
             rootPath
         };
