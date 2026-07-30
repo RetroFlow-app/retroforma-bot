@@ -3,6 +3,7 @@ const cron = require("node-cron");
 const {
     closeActiveExtremeMission,
     getExtremeMissionCatalog,
+    publishOneTimeExtremeTestMission,
     publishNextExtremeMission,
     validateExtremeMissionCatalog
 } = require("../services/extremeMissionService");
@@ -10,6 +11,9 @@ const { createExtremeMissionRepository } = require("../services/extremeMissionRe
 
 const EXTREME_TIMEZONE = "Europe/Warsaw";
 const WEDNESDAY_SHORT_NAME = "Wed";
+const EXTREME_TEST_PUBLISH_DATE_KEY = "2026-07-30";
+const EXTREME_TEST_PUBLISH_MINUTE_OF_DAY = 19 * 60 + 30;
+const EXTREME_TEST_PUBLISH_STATE_KEY = "EXTREME_TEST_000_2026-07-30_19:30";
 let isExtremeSchedulerRunning = false;
 
 function getWarsawDateParts(date = new Date()) {
@@ -55,6 +59,14 @@ function shouldPublishExtremeMission(state, now = new Date()) {
         && state.last_publish_date !== parts.dateKey;
 }
 
+function shouldPublishOneTimeExtremeTestMission(state, now = new Date()) {
+    const parts = getWarsawDateParts(now);
+
+    return parts.dateKey === EXTREME_TEST_PUBLISH_DATE_KEY
+        && parts.minuteOfDay >= EXTREME_TEST_PUBLISH_MINUTE_OF_DAY
+        && state.last_publish_date !== EXTREME_TEST_PUBLISH_STATE_KEY;
+}
+
 async function checkExtremeMissions(client, now = new Date(), dependencies = {}) {
     if (!dependencies.disableLock && isExtremeSchedulerRunning) {
         return {
@@ -72,6 +84,17 @@ async function checkExtremeMissions(client, now = new Date(), dependencies = {})
         let state = repository.getState();
         let closedMission = null;
         let publishedMission = null;
+        let publishedTestMission = null;
+
+        if (shouldPublishOneTimeExtremeTestMission(state, now)) {
+            publishedTestMission = await (dependencies.publishOneTimeExtremeTestMission || publishOneTimeExtremeTestMission)(client, {
+                ...dependencies,
+                now,
+                publishDateKey: EXTREME_TEST_PUBLISH_STATE_KEY,
+                repository
+            });
+            state = repository.getState();
+        }
 
         if (shouldCloseExtremeMission(state, now)) {
             closedMission = await (dependencies.closeActiveExtremeMission || closeActiveExtremeMission)(client, {
@@ -93,7 +116,8 @@ async function checkExtremeMissions(client, now = new Date(), dependencies = {})
 
         return {
             closedMission,
-            publishedMission
+            publishedMission,
+            publishedTestMission
         };
     } finally {
         isExtremeSchedulerRunning = false;
@@ -108,6 +132,18 @@ function startExtremeMissionScheduler(client, dependencies = {}) {
     checkExtremeMissions(client, new Date(), dependencies).catch((error) => {
         console.error(`Błąd początkowego sprawdzania Misji EXTREME: ${error.message}`);
     });
+
+    cron.schedule(
+        "30 19 30 7 *",
+        () => {
+            checkExtremeMissions(client, new Date(), dependencies).catch((error) => {
+                console.error(`Błąd testowej publikacji Misji EXTREME #000: ${error.message}`);
+            });
+        },
+        {
+            timezone: EXTREME_TIMEZONE
+        }
+    );
 
     cron.schedule(
         "0 15 * * 3",
@@ -138,7 +174,10 @@ function startExtremeMissionScheduler(client, dependencies = {}) {
 
 module.exports = {
     checkExtremeMissions,
+    EXTREME_TEST_PUBLISH_DATE_KEY,
+    EXTREME_TEST_PUBLISH_STATE_KEY,
     getWarsawDateParts,
+    shouldPublishOneTimeExtremeTestMission,
     shouldCloseExtremeMission,
     shouldPublishExtremeMission,
     startExtremeMissionScheduler

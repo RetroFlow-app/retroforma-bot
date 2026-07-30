@@ -9,8 +9,8 @@ const {
     createLogEmbed
 } = require("../utils/embedFactory");
 
-async function fetchExtremeMissionChannel(client) {
-    const channel = await client.channels.fetch(EXTREME_MISSION_CHANNEL_ID);
+async function fetchExtremeMissionChannel(client, channelId = EXTREME_MISSION_CHANNEL_ID) {
+    const channel = await client.channels.fetch(channelId);
 
     if (!channel) {
         throw new Error("Nie znaleziono kanału publikacji Misji EXTREME.");
@@ -36,7 +36,7 @@ function createExtremeAttachment(mission) {
 }
 
 async function publishExtremeMission(client, mission) {
-    const channel = await fetchExtremeMissionChannel(client);
+    const channel = await fetchExtremeMissionChannel(client, mission.missionChannelId || EXTREME_MISSION_CHANNEL_ID);
     const missionAttachment = createExtremeAttachment(mission);
 
     return channel.send({
@@ -52,7 +52,7 @@ async function publishExtremeMission(client, mission) {
 }
 
 async function closeExtremeMission(client, mission) {
-    const channel = await fetchExtremeMissionChannel(client);
+    const channel = await fetchExtremeMissionChannel(client, mission.missionChannelId || EXTREME_MISSION_CHANNEL_ID);
 
     return channel.send({
         embeds: [
