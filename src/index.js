@@ -11,6 +11,7 @@ const {
     registerCommandHandler,
     registerSlashCommands
 } = require("./handlers/commandHandler");
+const { startExtremeMissionScheduler } = require("./scheduler/extremeMissionScheduler");
 const { startMissionScheduler } = require("./scheduler/missionScheduler");
 const { logToChannel } = require("./services/logger");
 const { updateRankingMessage } = require("./services/rankingService");
@@ -54,6 +55,7 @@ client.once("clientReady", async () => {
 
     // Uruchamiamy harmonogram publikowania i zamykania misji Poligonu CAD.
     startMissionScheduler(client);
+    startExtremeMissionScheduler(client);
 
     // Aktualizujemy jedną stałą wiadomość rankingu po starcie bota.
     try {

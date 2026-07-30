@@ -9,7 +9,8 @@ const DEFAULT_BRANDING = {
     colorError: "#ED4245",
     colorInfo: "#5865F2",
     colorMission: "#FEE75C",
-    colorRanking: "#FAA61A"
+    colorRanking: "#FAA61A",
+    colorExtreme: "#C2410C"
 };
 
 const SEPARATOR = "━━━━━━━━━━━━━━━━━━━━━━";
@@ -181,6 +182,80 @@ function createMissionEmbed(mission, options = {}) {
     return embed;
 }
 
+function createExtremeMissionEmbed(mission, options = {}) {
+    const {
+        attachmentName = null,
+        closed = false
+    } = options;
+    const submitChannel = mission.submitChannelId ? `<#${mission.submitChannelId}>` : "#oddaj-extreme";
+    const hasNoDimensions = [1, 14].includes(Number(mission.extremeNumber));
+    const dimensionSection = hasNoDimensions
+        ? [
+            "⚠️ UWAGA – BRAK PODANYCH WYMIARÓW",
+            "",
+            "📐 W tej misji nie podajemy wymiarów.",
+            "",
+            "Masz pełną swobodę ich doboru.",
+            "",
+            "Najważniejsze jest zachowanie proporcji oraz możliwie jak najwierniejsze odwzorowanie przedstawionego modelu."
+        ]
+        : [
+            "📐 Wymiary",
+            "",
+            "Model wykonaj zgodnie z wymiarami przedstawionymi na grafice."
+        ];
+    const description = [
+        `🔥 MISJA EXTREME #${mission.displayNumber}`,
+        "",
+        "Przed Tobą cotygodniowe wyzwanie CAD.",
+        "",
+        SEPARATOR,
+        "",
+        "⏳ Czas trwania",
+        "",
+        "Środa 16:00",
+        "↓",
+        "Kolejna środa 15:00",
+        "",
+        SEPARATOR,
+        "",
+        "🏆 Nagrody gwarantowane",
+        "",
+        "🪙 20 PP",
+        "",
+        "⭐ 100 XP",
+        "",
+        SEPARATOR,
+        "",
+        "📸 Zasady",
+        "",
+        "• dodaj minimum 3 zdjęcia projektu",
+        "",
+        "• wszystkie zdjęcia dodaj w jednej wiadomości",
+        "",
+        "• projekt oddaj wyłącznie na kanale",
+        submitChannel,
+        "",
+        SEPARATOR,
+        "",
+        ...dimensionSection
+    ];
+
+    if (closed) {
+        description.push("", SEPARATOR, "", "🔒 Przyjmowanie zgłoszeń do tej misji zostało zakończone.");
+    }
+
+    const embed = createBaseEmbed("colorExtreme")
+        .setTitle(`🔥 MISJA EXTREME #${mission.displayNumber}`)
+        .setDescription(description.join("\n"));
+
+    if (attachmentName) {
+        embed.setImage(`attachment://${attachmentName}`);
+    }
+
+    return embed;
+}
+
 function createRankingEmbed({ topUsers, stats, updatedAt = new Date() }) {
     const medals = ["🥇", "🥈", "🥉"];
     const rankingLines = ["TOP 10", ""];
@@ -316,6 +391,7 @@ function createLogEmbed({ title = "Log systemowy", description, fields = [] }) {
 
 module.exports = {
     createErrorEmbed,
+    createExtremeMissionEmbed,
     createInfoEmbed,
     createLogEmbed,
     createMissionEmbed,

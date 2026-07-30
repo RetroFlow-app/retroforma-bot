@@ -320,6 +320,18 @@ function initializeDatabase(db) {
             updated_at TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS extreme_mission_state (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+            current_sequence INTEGER DEFAULT 0,
+            current_number INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'IDLE',
+            message_id TEXT,
+            published_at TEXT,
+            closed_at TEXT,
+            last_publish_date TEXT,
+            updated_at TEXT
+        );
+
         CREATE TABLE IF NOT EXISTS admin_point_transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             target_user_id INTEGER NOT NULL,
@@ -383,6 +395,9 @@ function initializeDatabase(db) {
 
         CREATE INDEX IF NOT EXISTS idx_mission_publications_message_id
             ON mission_publications (message_id);
+
+        CREATE INDEX IF NOT EXISTS idx_extreme_mission_state_status
+            ON extreme_mission_state (status);
 
         CREATE INDEX IF NOT EXISTS idx_admin_point_transactions_target_discord_id
             ON admin_point_transactions (target_discord_id);
