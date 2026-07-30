@@ -17,6 +17,7 @@ const {
     closeActiveExtremeMission,
     createExtremeMissionFromSequence,
     createExtremeTestMission,
+    getExtremeMissionAssetRoots,
     getExtremeMissionByReviewId,
     getExtremeMissionCatalog,
     getExtremeMissionImagePath,
@@ -134,6 +135,14 @@ test("automatycznie wykrywa liczbę Misji EXTREME i sortuje JPG numerycznie", ()
     } finally {
         context.close();
     }
+});
+
+test("domyślny katalog Misji EXTREME znajduje się wewnątrz repozytorium", () => {
+    const roots = getExtremeMissionAssetRoots();
+
+    assert.equal(roots.length, 1);
+    assert.match(roots[0].replace(/\\/g, "/"), /\/assets\/missions\/extreme$/);
+    assert.doesNotMatch(roots[0].replace(/\\/g, "/"), /raw-missions\/extreme$/);
 });
 
 test("jednorazowa Misja EXTREME #000 używa grafiki testowej i kanału testowego", async () => {

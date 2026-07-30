@@ -157,6 +157,13 @@ function startExtremeMissionScheduler(client, dependencies = {}) {
 
     const catalog = (dependencies.getExtremeMissionCatalog || getExtremeMissionCatalog)(dependencies);
 
+    logExtremeScheduler("Katalog grafik Misji EXTREME.", {
+        cwd: process.cwd(),
+        jpgCount: catalog.missions.length,
+        jpgFiles: catalog.missions.map((mission) => mission.fileName),
+        rootPath: catalog.rootPath
+    });
+
     validateExtremeMissionCatalog(catalog, dependencies.logger || console);
 
     checkExtremeMissions(client, new Date(), dependencies).catch((error) => {

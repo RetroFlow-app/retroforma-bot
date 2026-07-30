@@ -1,10 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-const {
-    projectRootPath,
-    rawMissionsPath
-} = require("../config/paths");
+const { assetsPath } = require("../config/paths");
 const { createExtremeMissionRepository } = require("./extremeMissionRepository");
 
 const EXTREME_MISSION_CHANNEL_ID = "1531714202241073243";
@@ -71,8 +68,7 @@ function isExtremeMissionId(missionId) {
 
 function getExtremeMissionAssetRoots() {
     return [
-        path.join(rawMissionsPath, "extreme"),
-        path.resolve(projectRootPath, "..", "raw-missions", "extreme")
+        path.resolve(assetsPath, "missions", "extreme")
     ];
 }
 
