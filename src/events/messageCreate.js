@@ -1,5 +1,6 @@
 const config = require("../config/appConfig");
 const { findOpenMission } = require("../services/missionService");
+const { handleExtremeSubmissionMessage } = require("../services/extremeSubmissionService");
 const { submitForReview } = require("../services/reviewService");
 const { hasUserSubmitted } = require("../services/submissionService");
 const {
@@ -11,6 +12,10 @@ const { replyTemporarily } = require("../utils/temporaryReply");
 // Obsługuje wiadomości z kanału zgłoszeń dla aktualnej misji.
 async function handleMessageCreate(message) {
     if (message.author.bot) {
+        return;
+    }
+
+    if (await handleExtremeSubmissionMessage(message)) {
         return;
     }
 

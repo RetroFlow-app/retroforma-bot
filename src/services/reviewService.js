@@ -9,6 +9,10 @@ const {
     createSuccessEmbed
 } = require("../utils/embedFactory");
 const { evaluateBadgesForUser } = require("./badgeService");
+const {
+    getExtremeMissionByReviewId,
+    isExtremeMissionId
+} = require("./extremeMissionService");
 const { getMission } = require("./missionService");
 const {
     addPoints,
@@ -80,12 +84,28 @@ async function fetchReviewChannel(client) {
 }
 
 async function fetchSubmitChannel(client) {
+    return fetchConfiguredSubmitChannel(client, config.submitChannelId);
+}
+
+async function fetchConfiguredSubmitChannel(client, channelId) {
     return fetchChannel(
         client,
-        config.submitChannelId,
+        channelId,
         "Brak submitChannelId w config.json.",
         "Nie znaleziono kanału zgłoszeń."
     );
+}
+
+function getMissionForReview(missionId) {
+    if (isExtremeMissionId(missionId)) {
+        const extremeMission = getExtremeMissionByReviewId(missionId);
+
+        if (extremeMission) {
+            return extremeMission;
+        }
+    }
+
+    return getMission(missionId);
 }
 
 async function fetchDiscordUser(client, discordId) {
@@ -148,8 +168,10 @@ function buildReviewMessagePayload({
     return payload;
 }
 
-async function replyToOriginalSubmission(client, submission, payload) {
-    const channel = await fetchSubmitChannel(client);
+async function replyToOriginalSubmission(client, submission, payload, mission = null) {
+    const channel = mission?.submitChannelId
+        ? await fetchConfiguredSubmitChannel(client, mission.submitChannelId)
+        : await fetchSubmitChannel(client);
 
     try {
         const originalMessage = await channel.messages.fetch(submission.message_id);
@@ -167,7 +189,7 @@ async function replyToOriginalSubmission(client, submission, payload) {
     }
 }
 
-async function notifyApprovedSubmission(client, submission, rewardResult) {
+async function notifyApprovedSubmission(client, submission, rewardResult, mission) {
     const embeds = [
         createSuccessEmbed({
             title: "✅ Projekt został zaakceptowany.",
@@ -193,10 +215,10 @@ async function notifyApprovedSubmission(client, submission, rewardResult) {
 
     await replyToOriginalSubmission(client, submission, {
         embeds
-    });
+    }, mission);
 }
 
-async function notifyRejectedSubmission(client, submission, reason) {
+async function notifyRejectedSubmission(client, submission, reason, mission) {
     await replyToOriginalSubmission(client, submission, {
         embeds: [
             createErrorEmbed({
@@ -208,7 +230,7 @@ async function notifyRejectedSubmission(client, submission, reason) {
                 ].join("\n")
             })
         ]
-    });
+    }, mission);
 }
 
 const approveSubmissionTransaction = db.transaction(({
@@ -232,11 +254,13 @@ const approveSubmissionTransaction = db.transaction(({
 
     addPoints(member, missionPoints);
     const userStats = addXP(approvedSubmission.discord_id, missionXp);
-    const streakStats = updateStreakAfterSubmission(
-        approvedSubmission.discord_id,
-        mission.id,
-        approvedAt
-    );
+    const streakStats = mission.affectsStreak === false
+        ? null
+        : updateStreakAfterSubmission(
+            approvedSubmission.discord_id,
+            mission.id,
+            approvedAt
+        );
     const earnedBadges = evaluateBadgesForUser(approvedSubmission.discord_id);
 
     return {
@@ -308,7 +332,7 @@ async function approveSubmission({ client, submissionId, moderator }) {
 
     ensurePendingSubmission(pendingSubmission);
 
-    const mission = getMission(pendingSubmission.mission_id);
+    const mission = getMissionForReview(pendingSubmission.mission_id);
     const member = await fetchDiscordUser(client, pendingSubmission.discord_id);
     const approvedAt = new Date().toISOString();
     const missionPoints = getMissionPoints(mission);
@@ -330,7 +354,7 @@ async function approveSubmission({ client, submissionId, moderator }) {
     }
 
     try {
-        await notifyApprovedSubmission(client, result.submission, result);
+        await notifyApprovedSubmission(client, result.submission, result, mission);
     } catch (error) {
         console.error(`Nie udało się powiadomić użytkownika o akceptacji: ${error.message}`);
     }
@@ -359,7 +383,7 @@ async function rejectSubmission({
 
     ensurePendingSubmission(pendingSubmission);
 
-    const mission = getMission(pendingSubmission.mission_id);
+    const mission = getMissionForReview(pendingSubmission.mission_id);
     const rejectedAt = new Date().toISOString();
     const safeReason = reason || "Nie podano powodu.";
     const rejectedSubmission = rejectSubmissionTransaction({
@@ -370,7 +394,7 @@ async function rejectSubmission({
     });
 
     try {
-        await notifyRejectedSubmission(client, rejectedSubmission, safeReason);
+        await notifyRejectedSubmission(client, rejectedSubmission, safeReason, mission);
     } catch (error) {
         console.error(`Nie udało się powiadomić użytkownika o odrzuceniu: ${error.message}`);
     }
@@ -393,5 +417,10 @@ module.exports = {
     approveSubmission,
     buildReviewMessagePayload,
     rejectSubmission,
-    submitForReview
+    submitForReview,
+    _test: {
+        getMissionForReview,
+        getMissionPoints,
+        getMissionXP
+    }
 };
