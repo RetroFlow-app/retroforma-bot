@@ -12,14 +12,23 @@ const {
     EXTREME_REWARD_XP,
     EXTREME_STATUS,
     EXTREME_SUBMIT_CHANNEL_ID,
+    EXTREME_TEST_MISSION_CHANNEL_ID,
+    EXTREME_TEST_REVIEW_MISSION_ID,
     closeActiveExtremeMission,
     createExtremeMissionFromSequence,
+    createExtremeTestMission,
     getExtremeMissionByReviewId,
     getExtremeMissionCatalog,
     getExtremeMissionImagePath,
     getExtremeReviewMissionId,
+    getExtremeTestMissionImagePath,
+    publishOneTimeExtremeTestMission,
     publishNextExtremeMission
 } = require("../src/services/extremeMissionService");
+const {
+    EXTREME_TEST_PUBLISH_STATE_KEY,
+    shouldPublishOneTimeExtremeTestMission
+} = require("../src/scheduler/extremeMissionScheduler");
 const { createExtremeMissionRepository } = require("../src/services/extremeMissionRepository");
 const {
     countImageAttachments,
@@ -110,6 +119,7 @@ test("automatycznie wykrywa liczbę Misji EXTREME i sortuje JPG numerycznie", ()
     try {
         fs.writeFileSync(path.join(context.assetRoot, "3.png"), "ignored");
         fs.writeFileSync(path.join(context.assetRoot, "4.jpeg"), "ignored");
+        fs.writeFileSync(path.join(context.assetRoot, "000.jpg"), "test-only");
         fs.writeFileSync(path.join(context.assetRoot, "not-a-number.jpg"), "ignored");
 
         const catalog = getExtremeMissionCatalog({
@@ -124,6 +134,70 @@ test("automatycznie wykrywa liczbę Misji EXTREME i sortuje JPG numerycznie", ()
     } finally {
         context.close();
     }
+});
+
+test("jednorazowa Misja EXTREME #000 używa grafiki testowej i kanału testowego", async () => {
+    const context = createTempContext([1, 2, 3]);
+    const publishedMissions = [];
+
+    try {
+        fs.writeFileSync(path.join(context.assetRoot, "000.jpg"), "test-only");
+        context.repository.saveState({
+            current_number: 3,
+            current_sequence: 3,
+            status: EXTREME_STATUS.CLOSED
+        });
+
+        const result = await publishOneTimeExtremeTestMission({}, {
+            assetRoots: context.assetRoots,
+            logger: {
+                info: () => {}
+            },
+            now: new Date("2026-07-30T19:30:00+02:00"),
+            publishDateKey: EXTREME_TEST_PUBLISH_STATE_KEY,
+            publishExtremeMission: async (client, mission) => {
+                publishedMissions.push(mission);
+
+                return {
+                    id: "extreme-test-message-000"
+                };
+            },
+            repository: context.repository
+        });
+        const state = context.repository.getState();
+
+        assert.equal(result.mission.id, EXTREME_TEST_REVIEW_MISSION_ID);
+        assert.equal(result.mission.displayNumber, "000");
+        assert.equal(result.mission.missionChannelId, EXTREME_TEST_MISSION_CHANNEL_ID);
+        assert.equal(result.mission.submitChannelId, EXTREME_SUBMIT_CHANNEL_ID);
+        assert.equal(result.mission.imagePath, path.join(context.assetRoot, "000.jpg"));
+        assert.equal(publishedMissions.length, 1);
+        assert.equal(state.status, EXTREME_STATUS.ACTIVE);
+        assert.equal(state.current_sequence, 3);
+        assert.equal(state.current_number, 0);
+        assert.equal(state.message_id, "extreme-test-message-000");
+        assert.equal(state.last_publish_date, EXTREME_TEST_PUBLISH_STATE_KEY);
+        assert.equal(getExtremeTestMissionImagePath({
+            assetRoots: context.assetRoots
+        }), path.join(context.assetRoot, "000.jpg"));
+    } finally {
+        context.close();
+    }
+});
+
+test("jednorazowy scheduler Misji EXTREME #000 działa tylko w oknie testowym", () => {
+    assert.equal(shouldPublishOneTimeExtremeTestMission({
+        last_publish_date: null
+    }, new Date("2026-07-30T19:29:00+02:00")), false);
+    assert.equal(shouldPublishOneTimeExtremeTestMission({
+        last_publish_date: null
+    }, new Date("2026-07-30T19:30:00+02:00")), true);
+    assert.equal(shouldPublishOneTimeExtremeTestMission({
+        last_publish_date: EXTREME_TEST_PUBLISH_STATE_KEY
+    }, new Date("2026-07-30T19:31:00+02:00")), false);
+    assert.equal(shouldPublishOneTimeExtremeTestMission({
+        last_publish_date: null
+    }, new Date("2026-07-31T19:30:00+02:00")), false);
 });
 
 test("publikuje nową Misję EXTREME na osobnym kanale", async () => {
@@ -383,4 +457,10 @@ test("akceptacja Misji EXTREME używa nagród 20 PP i 100 XP", () => {
     assert.equal(reviewTestApi.getMissionPoints(mission), 20);
     assert.equal(reviewTestApi.getMissionXP(mission), 100);
     assert.equal(getExtremeMissionByReviewId(missionId).affectsStreak, false);
+    assert.equal(createExtremeTestMission({
+        requireImage: false
+    }).points, EXTREME_REWARD_PP);
+    assert.equal(createExtremeTestMission({
+        requireImage: false
+    }).xp, EXTREME_REWARD_XP);
 });
