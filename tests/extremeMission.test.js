@@ -153,7 +153,7 @@ test("jednorazowa Misja EXTREME #000 używa grafiki testowej i kanału testowego
             logger: {
                 info: () => {}
             },
-            now: new Date("2026-07-30T19:30:00+02:00"),
+            now: new Date("2026-07-30T20:00:00+02:00"),
             publishDateKey: EXTREME_TEST_PUBLISH_STATE_KEY,
             publishExtremeMission: async (client, mission) => {
                 publishedMissions.push(mission);
@@ -188,16 +188,16 @@ test("jednorazowa Misja EXTREME #000 używa grafiki testowej i kanału testowego
 test("jednorazowy scheduler Misji EXTREME #000 działa tylko w oknie testowym", () => {
     assert.equal(shouldPublishOneTimeExtremeTestMission({
         last_publish_date: null
-    }, new Date("2026-07-30T19:29:00+02:00")), false);
+    }, new Date("2026-07-30T19:59:00+02:00")), false);
     assert.equal(shouldPublishOneTimeExtremeTestMission({
         last_publish_date: null
-    }, new Date("2026-07-30T19:30:00+02:00")), true);
+    }, new Date("2026-07-30T20:00:00+02:00")), true);
     assert.equal(shouldPublishOneTimeExtremeTestMission({
         last_publish_date: EXTREME_TEST_PUBLISH_STATE_KEY
-    }, new Date("2026-07-30T19:31:00+02:00")), false);
+    }, new Date("2026-07-30T20:01:00+02:00")), false);
     assert.equal(shouldPublishOneTimeExtremeTestMission({
         last_publish_date: null
-    }, new Date("2026-07-31T19:30:00+02:00")), false);
+    }, new Date("2026-07-31T20:00:00+02:00")), false);
 });
 
 test("publikuje nową Misję EXTREME na osobnym kanale", async () => {

@@ -12,9 +12,23 @@ const { createExtremeMissionRepository } = require("../services/extremeMissionRe
 const EXTREME_TIMEZONE = "Europe/Warsaw";
 const WEDNESDAY_SHORT_NAME = "Wed";
 const EXTREME_TEST_PUBLISH_DATE_KEY = "2026-07-30";
-const EXTREME_TEST_PUBLISH_MINUTE_OF_DAY = 19 * 60 + 30;
-const EXTREME_TEST_PUBLISH_STATE_KEY = "EXTREME_TEST_000_2026-07-30_19:30";
+const EXTREME_TEST_PUBLISH_MINUTE_OF_DAY = 20 * 60;
+const EXTREME_TEST_PUBLISH_STATE_KEY = "EXTREME_TEST_000_2026-07-30_20:00";
 let isExtremeSchedulerRunning = false;
+
+function logExtremeScheduler(message, data = null) {
+    if (data) {
+        console.info(`[EXTREME SCHEDULER] ${message}`, data);
+        return;
+    }
+
+    console.info(`[EXTREME SCHEDULER] ${message}`);
+}
+
+function logExtremeSchedulerError(message, error) {
+    console.error(`[EXTREME SCHEDULER] ${message}`);
+    console.error(error?.stack || error);
+}
 
 function getWarsawDateParts(date = new Date()) {
     const parts = new Intl.DateTimeFormat("en-CA", {
@@ -69,6 +83,7 @@ function shouldPublishOneTimeExtremeTestMission(state, now = new Date()) {
 
 async function checkExtremeMissions(client, now = new Date(), dependencies = {}) {
     if (!dependencies.disableLock && isExtremeSchedulerRunning) {
+        logExtremeScheduler("Pominięto sprawdzanie, bo poprzednie wywołanie nadal trwa.");
         return {
             closedMission: null,
             publishedMission: null,
@@ -85,8 +100,17 @@ async function checkExtremeMissions(client, now = new Date(), dependencies = {})
         let closedMission = null;
         let publishedMission = null;
         let publishedTestMission = null;
+        const shouldPublishTestMission = shouldPublishOneTimeExtremeTestMission(state, now);
 
-        if (shouldPublishOneTimeExtremeTestMission(state, now)) {
+        logExtremeScheduler("Sprawdzanie harmonogramu.", {
+            dateParts,
+            lastPublishDate: state.last_publish_date,
+            shouldPublishTestMission,
+            stateStatus: state.status
+        });
+
+        if (shouldPublishTestMission) {
+            logExtremeScheduler("Rozpoczynam jednorazową publikację Misji EXTREME #000.");
             publishedTestMission = await (dependencies.publishOneTimeExtremeTestMission || publishOneTimeExtremeTestMission)(client, {
                 ...dependencies,
                 now,
@@ -125,19 +149,30 @@ async function checkExtremeMissions(client, now = new Date(), dependencies = {})
 }
 
 function startExtremeMissionScheduler(client, dependencies = {}) {
+    logExtremeScheduler("Start schedulera Misji EXTREME.", {
+        botId: client.user?.id || null,
+        isReady: typeof client.isReady === "function" ? client.isReady() : null,
+        timezone: EXTREME_TIMEZONE
+    });
+
     const catalog = (dependencies.getExtremeMissionCatalog || getExtremeMissionCatalog)(dependencies);
 
     validateExtremeMissionCatalog(catalog, dependencies.logger || console);
 
     checkExtremeMissions(client, new Date(), dependencies).catch((error) => {
-        console.error(`Błąd początkowego sprawdzania Misji EXTREME: ${error.message}`);
+        logExtremeSchedulerError("Błąd początkowego sprawdzania Misji EXTREME.", error);
     });
 
+    logExtremeScheduler("Rejestruję jednorazowy cron testowy Misji EXTREME #000.", {
+        expression: "0 20 30 7 *",
+        publishAt: "2026-07-30 20:00 Europe/Warsaw"
+    });
     cron.schedule(
-        "30 19 30 7 *",
+        "0 20 30 7 *",
         () => {
+            logExtremeScheduler("Wywołano callback jednorazowego crona testowego #000.");
             checkExtremeMissions(client, new Date(), dependencies).catch((error) => {
-                console.error(`Błąd testowej publikacji Misji EXTREME #000: ${error.message}`);
+                logExtremeSchedulerError("Błąd testowej publikacji Misji EXTREME #000.", error);
             });
         },
         {
@@ -148,8 +183,9 @@ function startExtremeMissionScheduler(client, dependencies = {}) {
     cron.schedule(
         "0 15 * * 3",
         () => {
+            logExtremeScheduler("Wywołano callback crona zamknięcia Misji EXTREME.");
             checkExtremeMissions(client, new Date(), dependencies).catch((error) => {
-                console.error(`Błąd zamykania Misji EXTREME: ${error.message}`);
+                logExtremeSchedulerError("Błąd zamykania Misji EXTREME.", error);
             });
         },
         {
@@ -160,8 +196,9 @@ function startExtremeMissionScheduler(client, dependencies = {}) {
     cron.schedule(
         "0 16 * * 3",
         () => {
+            logExtremeScheduler("Wywołano callback crona publikacji regularnej Misji EXTREME.");
             checkExtremeMissions(client, new Date(), dependencies).catch((error) => {
-                console.error(`Błąd publikacji Misji EXTREME: ${error.message}`);
+                logExtremeSchedulerError("Błąd publikacji Misji EXTREME.", error);
             });
         },
         {

@@ -91,11 +91,22 @@ function getMissionNumberFromJpgFile(fileName) {
 function getExtremeTestMissionImagePath(options = {}) {
     const fileSystem = options.fs || fs;
     const roots = options.assetRoots || getExtremeMissionAssetRoots();
+    const logger = options.logger || console;
+
+    logger.info?.("[EXTREME TEST] Szukam grafiki 000.jpg.", {
+        roots
+    });
 
     for (const rootPath of roots) {
         const imagePath = path.join(rootPath, "000.jpg");
+        const exists = fileSystem.existsSync(imagePath);
 
-        if (fileSystem.existsSync(imagePath)) {
+        logger.info?.("[EXTREME TEST] Sprawdzam grafikę testową.", {
+            exists,
+            imagePath
+        });
+
+        if (exists) {
             return imagePath;
         }
     }
@@ -403,8 +414,17 @@ async function publishOneTimeExtremeTestMission(client, options = {}) {
     const logger = options.logger || console;
     const now = options.now || new Date();
     const state = repository.getState();
+
+    logger.info?.("[EXTREME TEST] Rozpoczynam publikację jednorazowej Misji EXTREME #000.", {
+        currentNumber: state.current_number,
+        currentSequence: state.current_sequence,
+        now: now.toISOString(),
+        targetChannelId: EXTREME_TEST_MISSION_CHANNEL_ID
+    });
+
     const mission = createExtremeTestMission({
         ...options,
+        logger,
         requireImage: false
     });
 
@@ -416,7 +436,9 @@ async function publishOneTimeExtremeTestMission(client, options = {}) {
     const message = await publishExtremeMission(client, mission);
     const publishedAt = now.toISOString();
 
-    logger.info?.("[EXTREME TEST] Opublikowano jednorazową Misję EXTREME #000.");
+    logger.info?.("[EXTREME TEST] Opublikowano jednorazową Misję EXTREME #000.", {
+        messageId: message.id
+    });
 
     repository.saveState({
         current_sequence: Number(state.current_sequence || 0),

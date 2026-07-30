@@ -1,5 +1,8 @@
 const path = require("node:path");
-const { AttachmentBuilder } = require("discord.js");
+const {
+    AttachmentBuilder,
+    PermissionsBitField
+} = require("discord.js");
 
 const {
     EXTREME_MISSION_CHANNEL_ID
@@ -10,10 +13,27 @@ const {
 } = require("../utils/embedFactory");
 
 async function fetchExtremeMissionChannel(client, channelId = EXTREME_MISSION_CHANNEL_ID) {
+    console.info("[EXTREME DISCORD] Pobieram kanał publikacji Misji EXTREME.", {
+        channelId
+    });
+
     const channel = await client.channels.fetch(channelId);
 
     if (!channel) {
         throw new Error("Nie znaleziono kanału publikacji Misji EXTREME.");
+    }
+
+    const permissions = channel.permissionsFor?.(client.user);
+
+    if (permissions) {
+        console.info("[EXTREME DISCORD] Uprawnienia bota na kanale publikacji.", {
+            attachFiles: permissions.has(PermissionsBitField.Flags.AttachFiles),
+            embedLinks: permissions.has(PermissionsBitField.Flags.EmbedLinks),
+            sendMessages: permissions.has(PermissionsBitField.Flags.SendMessages),
+            viewChannel: permissions.has(PermissionsBitField.Flags.ViewChannel)
+        });
+    } else {
+        console.info("[EXTREME DISCORD] Nie udało się odczytać uprawnień bota dla kanału publikacji.");
     }
 
     return channel;
@@ -38,6 +58,13 @@ function createExtremeAttachment(mission) {
 async function publishExtremeMission(client, mission) {
     const channel = await fetchExtremeMissionChannel(client, mission.missionChannelId || EXTREME_MISSION_CHANNEL_ID);
     const missionAttachment = createExtremeAttachment(mission);
+
+    console.info("[EXTREME DISCORD] Wysyłam wiadomość Misji EXTREME.", {
+        attachmentName: missionAttachment.name,
+        channelId: channel.id,
+        displayNumber: mission.displayNumber,
+        imagePath: mission.imagePath
+    });
 
     return channel.send({
         embeds: [
