@@ -12,25 +12,18 @@ const {
     EXTREME_REWARD_XP,
     EXTREME_STATUS,
     EXTREME_SUBMIT_CHANNEL_ID,
-    EXTREME_TEST_MISSION_CHANNEL_ID,
-    EXTREME_TEST_REVIEW_MISSION_ID,
     closeActiveExtremeMission,
     createExtremeMissionFromSequence,
-    createExtremeTestMission,
     getExtremeMissionAssetRoots,
     getExtremeMissionByReviewId,
     getExtremeMissionCatalog,
     getExtremeMissionImagePath,
     getExtremeReviewMissionId,
-    getExtremeTestMissionImagePath,
-    publishOneTimeExtremeTestMission,
     publishNextExtremeMission
 } = require("../src/services/extremeMissionService");
 const {
-    checkExtremeMissions,
-    EXTREME_TEST_PUBLISH_STATE_KEY,
-    getOneTimeExtremeTestStartupStatus,
-    shouldPublishOneTimeExtremeTestMission
+    shouldCloseExtremeMission,
+    shouldPublishExtremeMission
 } = require("../src/scheduler/extremeMissionScheduler");
 const { createExtremeMissionRepository } = require("../src/services/extremeMissionRepository");
 const {
@@ -60,7 +53,9 @@ function createTempContext(missionNumbers = [1, 2, 14]) {
 
     return {
         assetRoot,
-        assetRoots: [assetRoot],
+        assetRoots: [
+            assetRoot
+        ],
         close: () => {
             db.close();
             fs.rmSync(tempDir, {
@@ -116,13 +111,12 @@ function createMessage({ attachmentCount, channelId = EXTREME_SUBMIT_CHANNEL_ID 
     };
 }
 
-test("automatycznie wykrywa liczbę Misji EXTREME i sortuje JPG numerycznie", () => {
+test("automatycznie wykrywa produkcyjne Misje EXTREME i sortuje JPG numerycznie", () => {
     const context = createTempContext([10, 2, 1, 20, 9]);
 
     try {
         fs.writeFileSync(path.join(context.assetRoot, "3.png"), "ignored");
         fs.writeFileSync(path.join(context.assetRoot, "4.jpeg"), "ignored");
-        fs.writeFileSync(path.join(context.assetRoot, "000.jpg"), "test-only");
         fs.writeFileSync(path.join(context.assetRoot, "not-a-number.jpg"), "ignored");
 
         const catalog = getExtremeMissionCatalog({
@@ -131,6 +125,7 @@ test("automatycznie wykrywa liczbę Misji EXTREME i sortuje JPG numerycznie", ()
 
         assert.equal(catalog.missions.length, 5);
         assert.deepEqual(catalog.missions.map((mission) => mission.number), [1, 2, 9, 10, 20]);
+        assert.deepEqual(catalog.jpgFiles, ["1.jpg", "2.jpg", "9.jpg", "10.jpg", "20.jpg"]);
         assert.equal(getExtremeMissionImagePath(10, {
             assetRoots: context.assetRoots
         }), path.join(context.assetRoot, "10.jpg"));
@@ -147,89 +142,24 @@ test("domyślny katalog Misji EXTREME znajduje się wewnątrz repozytorium", () 
     assert.doesNotMatch(roots[0].replace(/\\/g, "/"), /raw-missions\/extreme$/);
 });
 
-test("jednorazowa Misja EXTREME #000 używa grafiki testowej i kanału testowego", async () => {
-    const context = createTempContext([1, 2, 3]);
-    const publishedMissions = [];
-
-    try {
-        fs.writeFileSync(path.join(context.assetRoot, "000.jpg"), "test-only");
-        context.repository.saveState({
-            current_number: 3,
-            current_sequence: 3,
-            status: EXTREME_STATUS.CLOSED
-        });
-
-        const result = await publishOneTimeExtremeTestMission({}, {
-            assetRoots: context.assetRoots,
-            logger: {
-                info: () => {}
-            },
-            now: new Date("2026-07-30T21:00:00+02:00"),
-            publishDateKey: EXTREME_TEST_PUBLISH_STATE_KEY,
-            publishExtremeMission: async (client, mission) => {
-                publishedMissions.push(mission);
-
-                return {
-                    id: "extreme-test-message-000"
-                };
-            },
-            repository: context.repository
-        });
-        const state = context.repository.getState();
-
-        assert.equal(result.mission.id, EXTREME_TEST_REVIEW_MISSION_ID);
-        assert.equal(result.mission.displayNumber, "000");
-        assert.equal(result.mission.missionChannelId, EXTREME_TEST_MISSION_CHANNEL_ID);
-        assert.equal(result.mission.submitChannelId, EXTREME_SUBMIT_CHANNEL_ID);
-        assert.equal(result.mission.imagePath, path.join(context.assetRoot, "000.jpg"));
-        assert.equal(publishedMissions.length, 1);
-        assert.equal(state.status, EXTREME_STATUS.ACTIVE);
-        assert.equal(state.current_sequence, 3);
-        assert.equal(state.current_number, 0);
-        assert.equal(state.message_id, "extreme-test-message-000");
-        assert.equal(state.last_publish_date, EXTREME_TEST_PUBLISH_STATE_KEY);
-        assert.equal(getExtremeTestMissionImagePath({
-            assetRoots: context.assetRoots
-        }), path.join(context.assetRoot, "000.jpg"));
-    } finally {
-        context.close();
-    }
-});
-
-test("jednorazowy scheduler Misji EXTREME #000 działa tylko w oknie testowym", () => {
-    assert.equal(shouldPublishOneTimeExtremeTestMission({
-        last_publish_date: null
-    }, new Date("2026-07-30T20:59:00+02:00")), false);
-    assert.equal(shouldPublishOneTimeExtremeTestMission({
-        last_publish_date: null
-    }, new Date("2026-07-30T21:00:00+02:00")), true);
-    assert.equal(shouldPublishOneTimeExtremeTestMission({
-        last_publish_date: EXTREME_TEST_PUBLISH_STATE_KEY
-    }, new Date("2026-07-30T21:01:00+02:00")), false);
-    assert.equal(shouldPublishOneTimeExtremeTestMission({
-        last_publish_date: null
-    }, new Date("2026-07-31T21:00:00+02:00")), false);
-    assert.deepEqual(getOneTimeExtremeTestStartupStatus({
-        last_publish_date: null
-    }, new Date("2026-07-30T20:59:00+02:00")), {
-        alreadyPublished: false,
-        shouldPublishAtStartup: false,
-        waitsForCronAt21: true
-    });
-    assert.deepEqual(getOneTimeExtremeTestStartupStatus({
-        last_publish_date: null
-    }, new Date("2026-07-30T21:02:00+02:00")), {
-        alreadyPublished: false,
-        shouldPublishAtStartup: true,
-        waitsForCronAt21: false
-    });
-    assert.deepEqual(getOneTimeExtremeTestStartupStatus({
-        last_publish_date: EXTREME_TEST_PUBLISH_STATE_KEY
-    }, new Date("2026-07-30T21:02:00+02:00")), {
-        alreadyPublished: true,
-        shouldPublishAtStartup: false,
-        waitsForCronAt21: false
-    });
+test("produkcyjny scheduler publikuje i zamyka wyłącznie w środy 15:00/16:00", () => {
+    assert.equal(shouldCloseExtremeMission({
+        last_publish_date: "2026-07-29",
+        status: EXTREME_STATUS.ACTIVE
+    }, new Date("2026-08-05T14:59:00+02:00")), false);
+    assert.equal(shouldCloseExtremeMission({
+        last_publish_date: "2026-07-29",
+        status: EXTREME_STATUS.ACTIVE
+    }, new Date("2026-08-05T15:00:00+02:00")), true);
+    assert.equal(shouldPublishExtremeMission({
+        last_publish_date: "2026-07-29"
+    }, new Date("2026-08-05T15:59:00+02:00")), false);
+    assert.equal(shouldPublishExtremeMission({
+        last_publish_date: "2026-07-29"
+    }, new Date("2026-08-05T16:00:00+02:00")), true);
+    assert.equal(shouldPublishExtremeMission({
+        last_publish_date: "2026-08-05"
+    }, new Date("2026-08-05T16:01:00+02:00")), false);
 });
 
 test("publikuje nową Misję EXTREME na osobnym kanale", async () => {
@@ -239,8 +169,8 @@ test("publikuje nową Misję EXTREME na osobnym kanale", async () => {
     try {
         const result = await publishNextExtremeMission({}, {
             assetRoots: context.assetRoots,
-            now: new Date("2026-07-29T16:00:00+02:00"),
-            publishDateKey: "2026-07-29",
+            now: new Date("2026-08-05T16:00:00+02:00"),
+            publishDateKey: "2026-08-05",
             publishExtremeMission: async (client, mission) => {
                 calls.push(mission);
 
@@ -362,7 +292,9 @@ test("brakujący folder Misji EXTREME jest logowany i nie publikuje misji", asyn
 
     try {
         const result = await publishNextExtremeMission({}, {
-            assetRoots: [missingRoot],
+            assetRoots: [
+                missingRoot
+            ],
             logger: {
                 error: (message) => errors.push(message)
             },
@@ -380,29 +312,24 @@ test("brakujący folder Misji EXTREME jest logowany i nie publikuje misji", asyn
     }
 });
 
-test("embed Misji EXTREME ma sekcję bez wymiarów dla misji 1 i 14 oraz wymiary dla pozostałych", () => {
+test("embed Misji EXTREME ma uproszczony produkcyjny układ", () => {
     const context = createTempContext([1, 2, 14]);
 
     try {
-        const firstMission = createExtremeMissionFromSequence(1, {
+        const mission = createExtremeMissionFromSequence(1, {
             assetRoots: context.assetRoots,
             extremeNumber: 1,
             requireImage: false
         });
-        const secondMission = createExtremeMissionFromSequence(2, {
-            assetRoots: context.assetRoots,
-            extremeNumber: 2,
-            requireImage: false
-        });
-        const fourteenthMission = createExtremeMissionFromSequence(3, {
-            assetRoots: context.assetRoots,
-            extremeNumber: 14,
-            requireImage: false
-        });
+        const description = createExtremeMissionEmbed(mission).data.description;
 
-        assert.match(createExtremeMissionEmbed(firstMission).data.description, /BRAK PODANYCH WYMIARÓW/);
-        assert.match(createExtremeMissionEmbed(fourteenthMission).data.description, /BRAK PODANYCH WYMIARÓW/);
-        assert.match(createExtremeMissionEmbed(secondMission).data.description, /Model wykonaj zgodnie z wymiarami/);
+        assert.match(description, /Cotygodniowe wyzwanie CAD/);
+        assert.match(description, /20 PP/);
+        assert.match(description, /100 XP/);
+        assert.match(description, /dodatkowe punkty od administracji/);
+        assert.match(description, /Minimum \*\*3 zdjęcia\*\*/);
+        assert.match(description, /Model wykonaj zgodnie z wymiarami/);
+        assert.doesNotMatch(description, /BRAK PODANYCH WYMIARÓW/);
     } finally {
         context.close();
     }
@@ -489,10 +416,4 @@ test("akceptacja Misji EXTREME używa nagród 20 PP i 100 XP", () => {
     assert.equal(reviewTestApi.getMissionPoints(mission), 20);
     assert.equal(reviewTestApi.getMissionXP(mission), 100);
     assert.equal(getExtremeMissionByReviewId(missionId).affectsStreak, false);
-    assert.equal(createExtremeTestMission({
-        requireImage: false
-    }).points, EXTREME_REWARD_PP);
-    assert.equal(createExtremeTestMission({
-        requireImage: false
-    }).xp, EXTREME_REWARD_XP);
 });

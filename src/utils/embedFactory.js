@@ -188,61 +188,34 @@ function createExtremeMissionEmbed(mission, options = {}) {
         closed = false
     } = options;
     const submitChannel = mission.submitChannelId ? `<#${mission.submitChannelId}>` : "#oddaj-extreme";
-    const hasNoDimensions = [1, 14].includes(Number(mission.extremeNumber));
-    const dimensionSection = hasNoDimensions
-        ? [
-            "⚠️ UWAGA – BRAK PODANYCH WYMIARÓW",
-            "",
-            "📐 W tej misji nie podajemy wymiarów.",
-            "",
-            "Masz pełną swobodę ich doboru.",
-            "",
-            "Najważniejsze jest zachowanie proporcji oraz możliwie jak najwierniejsze odwzorowanie przedstawionego modelu."
-        ]
-        : [
-            "📐 Wymiary",
-            "",
-            "Model wykonaj zgodnie z wymiarami przedstawionymi na grafice."
-        ];
+    const startText = mission.startText || "Środa 16:00";
+    const endText = mission.endText || "kolejna środa 15:00";
     const description = [
-        `🔥 MISJA EXTREME #${mission.displayNumber}`,
+        `🔥 **MISJA EXTREME #${mission.displayNumber}**`,
         "",
-        "Przed Tobą cotygodniowe wyzwanie CAD.",
+        "> Cotygodniowe wyzwanie CAD.",
         "",
-        SEPARATOR,
+        "🏆 **Nagrody gwarantowane**",
+        "🪙 **20 PP** • ⭐ **100 XP**",
         "",
-        "⏳ Czas trwania",
+        "🌟 **Bonus**",
+        "Projekt odwzorowany możliwie najwierniej w skali **1:1** otrzyma **dodatkowe punkty od administracji**.",
         "",
-        "Środa 16:00",
-        "↓",
-        "Kolejna środa 15:00",
+        `⏳ **${startText} → ${endText}**`,
         "",
-        SEPARATOR,
+        "📸 Minimum **3 zdjęcia**",
         "",
-        "🏆 Nagrody gwarantowane",
+        "💬 Wszystkie zdjęcia w **jednej wiadomości**",
         "",
-        "🪙 20 PP",
+        `#️⃣ Oddaj projekt na **${submitChannel}**`,
         "",
-        "⭐ 100 XP",
+        "📐 Model wykonaj zgodnie z wymiarami przedstawionymi na grafice.",
         "",
-        SEPARATOR,
-        "",
-        "📸 Zasady",
-        "",
-        "• dodaj minimum 3 zdjęcia projektu",
-        "",
-        "• wszystkie zdjęcia dodaj w jednej wiadomości",
-        "",
-        "• projekt oddaj wyłącznie na kanale",
-        submitChannel,
-        "",
-        SEPARATOR,
-        "",
-        ...dimensionSection
+        "Powodzenia! 🔥"
     ];
 
     if (closed) {
-        description.push("", SEPARATOR, "", "🔒 Przyjmowanie zgłoszeń do tej misji zostało zakończone.");
+        description.push("", "🔒 Przyjmowanie zgłoszeń do tej misji zostało zakończone.");
     }
 
     const embed = createBaseEmbed("colorExtreme")

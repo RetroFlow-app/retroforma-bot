@@ -5,11 +5,8 @@ const { assetsPath } = require("../config/paths");
 const { createExtremeMissionRepository } = require("./extremeMissionRepository");
 
 const EXTREME_MISSION_CHANNEL_ID = "1531714202241073243";
-const EXTREME_TEST_MISSION_CHANNEL_ID = "1531714202241073243";
 const EXTREME_SUBMIT_CHANNEL_ID = "1531714732296503488";
 const EXTREME_MISSION_ID_OFFSET = 900000;
-const EXTREME_TEST_REVIEW_MISSION_ID = EXTREME_MISSION_ID_OFFSET - 1;
-const EXTREME_TEST_MISSION_NUMBER = 0;
 const EXTREME_REWARD_PP = 20;
 const EXTREME_REWARD_XP = 100;
 const EXTREME_STATUS = {
@@ -51,10 +48,6 @@ function getExtremeReviewMissionId(sequence) {
 function getExtremeSequenceFromReviewMissionId(missionId) {
     const parsedMissionId = Number(missionId);
 
-    if (parsedMissionId === EXTREME_TEST_REVIEW_MISSION_ID) {
-        return EXTREME_TEST_MISSION_NUMBER;
-    }
-
     if (!Number.isSafeInteger(parsedMissionId) || parsedMissionId <= EXTREME_MISSION_ID_OFFSET) {
         return null;
     }
@@ -84,57 +77,6 @@ function getMissionNumberFromJpgFile(fileName) {
     return Number.isSafeInteger(missionNumber) && missionNumber > 0 ? missionNumber : null;
 }
 
-function getNumericJpgFiles(entries) {
-    return entries
-        .filter((entry) => entry.isFile())
-        .map((entry) => {
-            const match = /^(\d+)\.jpg$/i.exec(entry.name);
-
-            if (!match) {
-                return null;
-            }
-
-            const number = Number(match[1]);
-
-            if (!Number.isSafeInteger(number) || number < 0) {
-                return null;
-            }
-
-            return {
-                fileName: entry.name,
-                number
-            };
-        })
-        .filter(Boolean)
-        .sort((firstFile, secondFile) => firstFile.number - secondFile.number);
-}
-
-function getExtremeTestMissionImagePath(options = {}) {
-    const fileSystem = options.fs || fs;
-    const roots = options.assetRoots || getExtremeMissionAssetRoots();
-    const logger = options.logger || console;
-
-    logger.info?.("[EXTREME TEST] Szukam grafiki 000.jpg.", {
-        roots
-    });
-
-    for (const rootPath of roots) {
-        const imagePath = path.join(rootPath, "000.jpg");
-        const exists = fileSystem.existsSync(imagePath);
-
-        logger.info?.("[EXTREME TEST] Sprawdzam grafikę testową.", {
-            exists,
-            imagePath
-        });
-
-        if (exists) {
-            return imagePath;
-        }
-    }
-
-    return null;
-}
-
 function readExtremeMissionCatalogFromRoot(rootPath, fileSystem = fs) {
     try {
         if (!rootPath || !fileSystem.existsSync(rootPath)) {
@@ -155,11 +97,9 @@ function readExtremeMissionCatalogFromRoot(rootPath, fileSystem = fs) {
             };
         }
 
-        const entries = fileSystem.readdirSync(rootPath, {
+        const missions = fileSystem.readdirSync(rootPath, {
             withFileTypes: true
-        });
-        const jpgFiles = getNumericJpgFiles(entries);
-        const missions = entries
+        })
             .filter((entry) => entry.isFile())
             .map((entry) => {
                 const missionNumber = getMissionNumberFromJpgFile(entry.name);
@@ -179,7 +119,7 @@ function readExtremeMissionCatalogFromRoot(rootPath, fileSystem = fs) {
 
         return {
             exists: true,
-            jpgFiles: jpgFiles.map((file) => file.fileName),
+            jpgFiles: missions.map((mission) => mission.fileName),
             missions,
             rootPath
         };
@@ -279,31 +219,6 @@ function getExtremeMissionImagePath(number, options = {}) {
     return mission?.imagePath || null;
 }
 
-function createExtremeTestMission(options = {}) {
-    const imagePath = getExtremeTestMissionImagePath(options);
-
-    if (!imagePath && options.requireImage !== false) {
-        throw new Error("Nie znaleziono grafiki testowej Misji EXTREME 000.jpg.");
-    }
-
-    return {
-        id: EXTREME_TEST_REVIEW_MISSION_ID,
-        type: "EXTREME_TEST",
-        sequence: EXTREME_TEST_MISSION_NUMBER,
-        extremeNumber: EXTREME_TEST_MISSION_NUMBER,
-        displayNumber: "000",
-        number: "EXTREME 000",
-        title: "Misja EXTREME #000",
-        description: "Przed Tobą cotygodniowe wyzwanie CAD.",
-        points: EXTREME_REWARD_PP,
-        xp: EXTREME_REWARD_XP,
-        imagePath,
-        missionChannelId: EXTREME_TEST_MISSION_CHANNEL_ID,
-        submitChannelId: EXTREME_SUBMIT_CHANNEL_ID,
-        affectsStreak: false
-    };
-}
-
 function createExtremeMissionFromSequence(sequence, options = {}) {
     const safeSequence = normalizePositiveInteger(sequence, "sekwencji Misji EXTREME");
     const catalog = getExtremeMissionCatalog(options);
@@ -331,7 +246,7 @@ function createExtremeMissionFromSequence(sequence, options = {}) {
         displayNumber,
         number: `EXTREME ${displayNumber}`,
         title: `Misja EXTREME #${displayNumber}`,
-        description: "Przed Tobą cotygodniowe wyzwanie CAD.",
+        description: "Cotygodniowe wyzwanie CAD.",
         points: EXTREME_REWARD_PP,
         xp: EXTREME_REWARD_XP,
         imagePath,
@@ -343,13 +258,6 @@ function createExtremeMissionFromSequence(sequence, options = {}) {
 
 function getExtremeMissionByReviewId(missionId, options = {}) {
     const sequence = getExtremeSequenceFromReviewMissionId(missionId);
-
-    if (sequence === EXTREME_TEST_MISSION_NUMBER) {
-        return createExtremeTestMission({
-            ...options,
-            requireImage: false
-        });
-    }
 
     if (!sequence) {
         return null;
@@ -369,14 +277,7 @@ function getActiveExtremeMission(options = {}) {
         return null;
     }
 
-    if (Number(state.current_number) === EXTREME_TEST_MISSION_NUMBER) {
-        return createExtremeTestMission({
-            ...options,
-            requireImage: false
-        });
-    }
-
-    if (Number(state.current_sequence) < 1) {
+    if (Number(state.current_number) < 1 || Number(state.current_sequence) < 1) {
         return null;
     }
 
@@ -432,55 +333,6 @@ async function publishNextExtremeMission(client, options = {}) {
     };
 }
 
-async function publishOneTimeExtremeTestMission(client, options = {}) {
-    const repository = options.repository || createExtremeMissionRepository(options.db);
-    const publishExtremeMission = options.publishExtremeMission || getDefaultPublishService();
-    const logger = options.logger || console;
-    const now = options.now || new Date();
-    const state = repository.getState();
-
-    logger.info?.("[EXTREME TEST] Rozpoczynam publikację jednorazowej Misji EXTREME #000.", {
-        currentNumber: state.current_number,
-        currentSequence: state.current_sequence,
-        now: now.toISOString(),
-        targetChannelId: EXTREME_TEST_MISSION_CHANNEL_ID
-    });
-
-    const mission = createExtremeTestMission({
-        ...options,
-        logger,
-        requireImage: false
-    });
-
-    if (!mission.imagePath) {
-        logger.error("[EXTREME TEST] Nie znaleziono grafiki testowej 000.jpg. Misja testowa nie została opublikowana.");
-        return null;
-    }
-
-    const message = await publishExtremeMission(client, mission);
-    const publishedAt = now.toISOString();
-
-    logger.info?.("[EXTREME TEST] Opublikowano jednorazową Misję EXTREME #000.", {
-        messageId: message.id
-    });
-
-    repository.saveState({
-        current_sequence: Number(state.current_sequence || 0),
-        current_number: EXTREME_TEST_MISSION_NUMBER,
-        status: EXTREME_STATUS.ACTIVE,
-        message_id: message.id,
-        published_at: publishedAt,
-        closed_at: null,
-        last_publish_date: options.publishDateKey || null,
-        updated_at: publishedAt
-    });
-
-    return {
-        message,
-        mission
-    };
-}
-
 async function closeActiveExtremeMission(client, options = {}) {
     const repository = options.repository || createExtremeMissionRepository(options.db);
     const closeExtremeMission = options.closeExtremeMission || getDefaultCloseService();
@@ -491,16 +343,21 @@ async function closeActiveExtremeMission(client, options = {}) {
         return null;
     }
 
-    const mission = Number(state.current_number) === EXTREME_TEST_MISSION_NUMBER
-        ? createExtremeTestMission({
-            ...options,
-            requireImage: false
-        })
-        : createExtremeMissionFromSequence(Number(state.current_sequence), {
-            ...options,
-            extremeNumber: Number(state.current_number) || undefined,
-            requireImage: false
+    if (Number(state.current_number) < 1 || Number(state.current_sequence) < 1) {
+        repository.saveState({
+            status: EXTREME_STATUS.CLOSED,
+            closed_at: now.toISOString(),
+            updated_at: now.toISOString()
         });
+
+        return null;
+    }
+
+    const mission = createExtremeMissionFromSequence(Number(state.current_sequence), {
+        ...options,
+        extremeNumber: Number(state.current_number) || undefined,
+        requireImage: false
+    });
 
     await closeExtremeMission(client, mission, state);
 
@@ -520,12 +377,8 @@ module.exports = {
     EXTREME_REWARD_XP,
     EXTREME_STATUS,
     EXTREME_SUBMIT_CHANNEL_ID,
-    EXTREME_TEST_MISSION_CHANNEL_ID,
-    EXTREME_TEST_MISSION_NUMBER,
-    EXTREME_TEST_REVIEW_MISSION_ID,
     closeActiveExtremeMission,
     createExtremeMissionFromSequence,
-    createExtremeTestMission,
     formatExtremeMissionNumber,
     getActiveExtremeMission,
     getExtremeMissionAssetRoots,
@@ -536,9 +389,7 @@ module.exports = {
     getExtremeReviewMissionId,
     getExtremeSequenceFromReviewMissionId,
     getNextExtremeMissionNumber,
-    getExtremeTestMissionImagePath,
     isExtremeMissionId,
-    publishOneTimeExtremeTestMission,
     publishNextExtremeMission,
     validateExtremeMissionCatalog
 };
