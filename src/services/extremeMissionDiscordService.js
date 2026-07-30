@@ -23,6 +23,11 @@ async function fetchExtremeMissionChannel(client, channelId = EXTREME_MISSION_CH
         throw new Error("Nie znaleziono kanału publikacji Misji EXTREME.");
     }
 
+    console.info("[EXTREME DISCORD] Wykryto kanaĹ‚ publikacji Misji EXTREME.", {
+        channelId: channel.id,
+        channelName: channel.name || null
+    });
+
     const permissions = channel.permissionsFor?.(client.user);
 
     if (permissions) {

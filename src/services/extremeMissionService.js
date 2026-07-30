@@ -1,10 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-const {
-    projectRootPath,
-    rawMissionsPath
-} = require("../config/paths");
+const { assetsPath } = require("../config/paths");
 const { createExtremeMissionRepository } = require("./extremeMissionRepository");
 
 const EXTREME_MISSION_CHANNEL_ID = "1531714202241073243";
@@ -71,8 +68,7 @@ function isExtremeMissionId(missionId) {
 
 function getExtremeMissionAssetRoots() {
     return [
-        path.join(rawMissionsPath, "extreme"),
-        path.resolve(projectRootPath, "..", "raw-missions", "extreme")
+        path.resolve(assetsPath, "missions", "extreme")
     ];
 }
 
@@ -86,6 +82,31 @@ function getMissionNumberFromJpgFile(fileName) {
     const missionNumber = Number(match[1]);
 
     return Number.isSafeInteger(missionNumber) && missionNumber > 0 ? missionNumber : null;
+}
+
+function getNumericJpgFiles(entries) {
+    return entries
+        .filter((entry) => entry.isFile())
+        .map((entry) => {
+            const match = /^(\d+)\.jpg$/i.exec(entry.name);
+
+            if (!match) {
+                return null;
+            }
+
+            const number = Number(match[1]);
+
+            if (!Number.isSafeInteger(number) || number < 0) {
+                return null;
+            }
+
+            return {
+                fileName: entry.name,
+                number
+            };
+        })
+        .filter(Boolean)
+        .sort((firstFile, secondFile) => firstFile.number - secondFile.number);
 }
 
 function getExtremeTestMissionImagePath(options = {}) {
@@ -134,9 +155,11 @@ function readExtremeMissionCatalogFromRoot(rootPath, fileSystem = fs) {
             };
         }
 
-        const missions = fileSystem.readdirSync(rootPath, {
+        const entries = fileSystem.readdirSync(rootPath, {
             withFileTypes: true
-        })
+        });
+        const jpgFiles = getNumericJpgFiles(entries);
+        const missions = entries
             .filter((entry) => entry.isFile())
             .map((entry) => {
                 const missionNumber = getMissionNumberFromJpgFile(entry.name);
@@ -156,6 +179,7 @@ function readExtremeMissionCatalogFromRoot(rootPath, fileSystem = fs) {
 
         return {
             exists: true,
+            jpgFiles: jpgFiles.map((file) => file.fileName),
             missions,
             rootPath
         };
