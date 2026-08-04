@@ -165,6 +165,7 @@ test("initializeDatabase tworzy mission_publications bez naruszania danych użyt
         assert.deepEqual(db.prepare("SELECT * FROM users_badges WHERE discord_id = ?").get("123"), userBadgeBefore);
         assert.ok(getTableNames(db).includes("mission_publications"));
         assert.ok(getTableNames(db).includes("admin_point_transactions"));
+        assert.ok(getTableNames(db).includes("admin_xp_transactions"));
     } finally {
         close();
     }
@@ -244,6 +245,151 @@ test("initializeDatabase kopiuje stare saldo PP do pp_total_earned tylko przy mi
         assert.equal(afterSecondRun.pp, 40);
         assert.equal(afterSecondRun.pp_total_earned, 240);
     } finally {
+        close();
+    }
+});
+
+test("initializeDatabase czyści stary stan testowej Misji EXTREME #000", () => {
+    const { db, close } = createTempDatabase();
+    const infos = [];
+    const originalInfo = console.info;
+
+    try {
+        initializeDatabase(db);
+
+        db.prepare(`
+            INSERT OR REPLACE INTO extreme_mission_state (
+                id,
+                current_sequence,
+                current_number,
+                status,
+                message_id,
+                published_at,
+                closed_at,
+                last_publish_date,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+            1,
+            99,
+            0,
+            "ACTIVE",
+            "message-test-000",
+            "2026-07-30T19:00:00.000Z",
+            null,
+            "EXTREME_TEST_000_2026-07-30_21:00",
+            "2026-07-30T19:00:00.000Z"
+        );
+
+        const before = db.prepare("SELECT * FROM extreme_mission_state WHERE id = 1").get();
+
+        console.info = (message) => {
+            infos.push(String(message));
+        };
+
+        initializeDatabase(db);
+
+        const after = db.prepare("SELECT * FROM extreme_mission_state WHERE id = 1").get();
+
+        assert.equal(before.status, "ACTIVE");
+        assert.equal(before.last_publish_date, "EXTREME_TEST_000_2026-07-30_21:00");
+        assert.equal(after.status, "IDLE");
+        assert.equal(after.current_sequence, 0);
+        assert.equal(after.current_number, 0);
+        assert.equal(after.message_id, null);
+        assert.equal(after.published_at, null);
+        assert.equal(after.closed_at, null);
+        assert.equal(after.last_publish_date, null);
+        assert.deepEqual(infos, ["[EXTREME CLEANUP] Usunięto pozostałość testowej misji #000."]);
+    } finally {
+        console.info = originalInfo;
+        close();
+    }
+});
+
+test("cleanup EXTREME nie zmienia prawdziwego aktywnego stanu produkcyjnego", () => {
+    const { db, close } = createTempDatabase();
+
+    try {
+        initializeDatabase(db);
+
+        db.prepare(`
+            INSERT OR REPLACE INTO extreme_mission_state (
+                id,
+                current_sequence,
+                current_number,
+                status,
+                message_id,
+                published_at,
+                closed_at,
+                last_publish_date,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+            1,
+            5,
+            5,
+            "ACTIVE",
+            "message-production-005",
+            "2026-08-05T14:00:00.000Z",
+            null,
+            "2026-08-05",
+            "2026-08-05T14:00:00.000Z"
+        );
+
+        const before = db.prepare("SELECT * FROM extreme_mission_state WHERE id = 1").get();
+
+        initializeDatabase(db);
+
+        assert.deepEqual(db.prepare("SELECT * FROM extreme_mission_state WHERE id = 1").get(), before);
+    } finally {
+        close();
+    }
+});
+
+test("cleanup EXTREME jest bezpieczny przy ponownym uruchomieniu", () => {
+    const { db, close } = createTempDatabase();
+    const infos = [];
+    const originalInfo = console.info;
+
+    try {
+        initializeDatabase(db);
+
+        db.prepare(`
+            INSERT OR REPLACE INTO extreme_mission_state (
+                id,
+                current_sequence,
+                current_number,
+                status,
+                last_publish_date,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+            1,
+            1,
+            0,
+            "ACTIVE",
+            "EXTREME_TEST_000_2026-07-30_21:00",
+            "2026-07-30T19:00:00.000Z"
+        );
+
+        console.info = (message) => {
+            infos.push(String(message));
+        };
+
+        initializeDatabase(db);
+        const afterFirstRun = db.prepare("SELECT * FROM extreme_mission_state WHERE id = 1").get();
+
+        initializeDatabase(db);
+        const afterSecondRun = db.prepare("SELECT * FROM extreme_mission_state WHERE id = 1").get();
+
+        assert.deepEqual(afterSecondRun, afterFirstRun);
+        assert.deepEqual(infos, ["[EXTREME CLEANUP] Usunięto pozostałość testowej misji #000."]);
+    } finally {
+        console.info = originalInfo;
         close();
     }
 });

@@ -2,6 +2,7 @@ const config = require("../config/appConfig");
 const adminPanel = require("../commands/adminCommands");
 const adminPointsPanel = require("../commands/adminPointsCommands");
 const adminResetAccountPanel = require("../commands/adminResetAccountCommand");
+const adminXpPanel = require("../commands/adminXpCommand");
 const inventoryCommand = require("../commands/inventoryCommand");
 const pointsCommand = require("../commands/pointsCommand");
 const profileCommand = require("../commands/profileCommand");
@@ -29,6 +30,7 @@ const commands = [
     shopCommand,
     ...adminPanel.commands,
     ...adminPointsPanel.commands,
+    ...adminXpPanel.commands,
     ...adminResetAccountPanel.commands
 ];
 
@@ -277,6 +279,10 @@ function registerCommandHandler(client) {
 }
 
 module.exports = {
+    _test: {
+        commands,
+        handleSlashCommand
+    },
     registerCommandHandler,
     registerSlashCommands
 };

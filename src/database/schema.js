@@ -224,6 +224,49 @@ function syncTerminalShopItemCode(db) {
     `).run("terminal", "Terminal Polowy", legacyTerminal.id);
 }
 
+// Usuwa jednorazowy stan po testowej Misji EXTREME #000 bez dotykania produkcyjnej rotacji.
+function cleanupExtremeTestMissionState(db, logger = console) {
+    const testState = db.prepare(`
+        SELECT *
+        FROM extreme_mission_state
+        WHERE id = 1
+          AND last_publish_date LIKE 'EXTREME_TEST_%'
+    `).get();
+
+    if (!testState) {
+        return null;
+    }
+
+    const updatedAt = new Date().toISOString();
+
+    db.prepare(`
+        UPDATE extreme_mission_state
+        SET current_sequence = 0,
+            current_number = 0,
+            status = 'IDLE',
+            message_id = NULL,
+            published_at = NULL,
+            closed_at = NULL,
+            last_publish_date = NULL,
+            updated_at = ?
+        WHERE id = 1
+          AND last_publish_date LIKE 'EXTREME_TEST_%'
+    `).run(updatedAt);
+
+    const productionState = db.prepare(`
+        SELECT *
+        FROM extreme_mission_state
+        WHERE id = 1
+    `).get();
+
+    logger.info("[EXTREME CLEANUP] Usunięto pozostałość testowej misji #000.");
+
+    return {
+        after: productionState,
+        before: testState
+    };
+}
+
 function initializeDatabase(db) {
     db.exec(`
         CREATE TABLE IF NOT EXISTS users (
@@ -355,6 +398,21 @@ function initializeDatabase(db) {
             created_at TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS admin_xp_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            target_user_id INTEGER NOT NULL,
+            target_discord_id TEXT NOT NULL,
+            admin_discord_id TEXT NOT NULL,
+            operation TEXT NOT NULL,
+            amount INTEGER NOT NULL,
+            xp_before INTEGER NOT NULL,
+            xp_after INTEGER NOT NULL,
+            level_before INTEGER NOT NULL,
+            level_after INTEGER NOT NULL,
+            reason TEXT,
+            created_at TEXT
+        );
+
         CREATE TABLE IF NOT EXISTS shop_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             code TEXT UNIQUE NOT NULL,
@@ -411,6 +469,12 @@ function initializeDatabase(db) {
         CREATE INDEX IF NOT EXISTS idx_admin_reset_transactions_created_at
             ON admin_reset_transactions (created_at);
 
+        CREATE INDEX IF NOT EXISTS idx_admin_xp_transactions_target_discord_id
+            ON admin_xp_transactions (target_discord_id);
+
+        CREATE INDEX IF NOT EXISTS idx_admin_xp_transactions_created_at
+            ON admin_xp_transactions (created_at);
+
         CREATE INDEX IF NOT EXISTS idx_shop_items_category_active
             ON shop_items (category, active);
 
@@ -426,6 +490,7 @@ function initializeDatabase(db) {
 
     migrateUsersTable(db);
     migrateSubmissionsTable(db);
+    cleanupExtremeTestMissionState(db);
     syncTerminalShopItemCode(db);
     seedShopItems(db);
     syncShopItemCategories(db);
@@ -434,6 +499,7 @@ function initializeDatabase(db) {
 }
 
 module.exports = {
+    cleanupExtremeTestMissionState,
     disableRemovedShopItems,
     seedShopItems,
     syncShopItemCategories,

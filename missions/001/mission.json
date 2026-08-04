@@ -8,5 +8,6 @@
     "closeAt": null,
     "published": false,
     "closed": false,
-    "messageId": null
+    "messageId": null,
+    "xp": 100
 }

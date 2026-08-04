@@ -24,16 +24,16 @@ const difficultyConfigs = [
         folderNames: ["sredni", "średni"],
         label: "Średni",
         summaryKey: "medium",
-        points: 30,
-        xp: 150
+        points: 20,
+        xp: 100
     },
     {
         key: "hard",
         folderNames: ["trudny"],
         label: "Trudny",
         summaryKey: "hard",
-        points: 50,
-        xp: 250
+        points: 20,
+        xp: 100
     }
 ];
 

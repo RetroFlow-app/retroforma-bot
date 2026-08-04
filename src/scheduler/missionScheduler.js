@@ -15,6 +15,10 @@ const {
     markMissionClosed
 } = require("../services/missionService");
 const { applyMissionSchedule } = require("../services/missionScheduleService");
+const {
+    buildMissionQueue,
+    getQueuedMissionsDueForClose
+} = require("../services/missionQueueService");
 
 const publishLocks = new Map();
 const loggedHistoricalMissions = new Set();
@@ -29,6 +33,8 @@ const defaultPublishDependencies = {
 
         return getMissionPublication(missionId);
     },
+    getScheduledMissionQueue: buildMissionQueue,
+    getQueuedMissionsDueForClose,
     markMissionPublished,
     missionMessageExists,
     publishMission,
@@ -82,9 +88,11 @@ function logHistoricalMissionSkipped(mission) {
 }
 
 function getActiveScheduledMission(missions, now = new Date(), dependencies = defaultPublishDependencies) {
-    const scheduledMissions = missions
-        .map((mission) => dependencies.applyMissionSchedule(mission))
-        .sort((firstMission, secondMission) => Number(firstMission.id) - Number(secondMission.id));
+    const scheduledMissions = dependencies.getScheduledMissionQueue
+        ? dependencies.getScheduledMissionQueue(missions)
+        : missions
+            .map((mission) => dependencies.applyMissionSchedule(mission))
+            .sort((firstMission, secondMission) => Number(firstMission.id) - Number(secondMission.id));
     let activeMission = null;
 
     for (const scheduledMission of scheduledMissions) {
@@ -159,7 +167,10 @@ function persistKnownPublication(dependencies, mission, messageId) {
 
 async function ensureActiveMissionPublished(client, scheduledMission, now = new Date(), dependencies = defaultPublishDependencies) {
     return withMissionPublishLock(scheduledMission.id, async () => {
-        const latestMission = dependencies.applyMissionSchedule(dependencies.getMission(scheduledMission.id));
+        const latestMission = dependencies.applyMissionSchedule(
+            dependencies.getMission(scheduledMission.id),
+            scheduledMission.scheduleSlot || scheduledMission.id
+        );
 
         if (!isMissionActive(latestMission, now)) {
             console.log(`[MISSION] Historical mission skipped: ${getMissionNumber(latestMission)}`);
@@ -213,17 +224,16 @@ async function publishDueMissions(client, now = new Date(), dependencies = defau
 }
 
 // Zamyka misje, których wyliczony closeAt już minął, a closed nadal jest false.
-async function closeDueMissions(client, now = new Date()) {
-    const missions = getAllMissions();
+async function closeDueMissions(client, now = new Date(), dependencies = defaultPublishDependencies) {
+    const missions = dependencies.getAllMissions();
+    const dueMissions = dependencies.getQueuedMissionsDueForClose
+        ? dependencies.getQueuedMissionsDueForClose(missions, now)
+        : missions
+            .map((mission) => dependencies.applyMissionSchedule(mission))
+            .filter((scheduledMission) => !scheduledMission.closed && isDue(scheduledMission.closeAt, now));
 
-    for (const mission of missions) {
-        const scheduledMission = applyMissionSchedule(mission);
-
-        if (scheduledMission.closed || !isDue(scheduledMission.closeAt, now)) {
-            continue;
-        }
-
-        const closedMission = markMissionClosed(scheduledMission.id);
+    for (const scheduledMission of dueMissions) {
+        const closedMission = dependencies.markMissionClosed(scheduledMission.id);
 
         try {
             const { markMissionPublicationClosed } = require("../services/missionPublicationRepository");
