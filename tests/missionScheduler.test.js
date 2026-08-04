@@ -1,7 +1,12 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 
-const { publishDueMissions } = require("../src/scheduler/missionScheduler");
+const {
+    publishDueMissions
+} = require("../src/scheduler/missionScheduler");
 
 const NOW = new Date("2026-07-18T12:00:00+02:00");
 
@@ -126,6 +131,216 @@ async function withSilentMissionLogs(callback) {
         console.log = originalLog;
     }
 }
+
+function writeMissionJson(missionsRoot, id, overrides = {}) {
+    const missionNumber = String(id).padStart(3, "0");
+    const missionFolder = path.join(missionsRoot, missionNumber);
+    const mission = {
+        id,
+        title: `Misja CAD #${missionNumber}`,
+        difficulty: "Łatwy",
+        points: 20,
+        xp: 100,
+        description: "Misja testowa.",
+        published: false,
+        closed: false,
+        messageId: null,
+        ...overrides
+    };
+
+    fs.mkdirSync(missionFolder, {
+        recursive: true
+    });
+    fs.writeFileSync(
+        path.join(missionFolder, "mission.json"),
+        `${JSON.stringify(mission, null, 4)}\n`,
+        "utf8"
+    );
+    fs.writeFileSync(path.join(missionFolder, "image.jpg"), "test-image");
+}
+
+function readMissionJson(missionsRoot, id) {
+    return JSON.parse(
+        fs.readFileSync(
+            path.join(missionsRoot, String(id).padStart(3, "0"), "mission.json"),
+            "utf8"
+        )
+    );
+}
+
+async function withSchedulerUsingTempMissions(missions, callback) {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "retroforma-mission-scheduler-"));
+    const missionsRoot = path.join(tempDir, "missions");
+    const actualPaths = require("../src/config/paths");
+    const moduleIds = [
+        require.resolve("../src/config/paths"),
+        require.resolve("../src/services/missionService"),
+        require.resolve("../src/services/missionDiscordService"),
+        require.resolve("../src/services/missionPublicationRepository"),
+        require.resolve("../src/services/streakService"),
+        require.resolve("../src/scheduler/missionScheduler")
+    ];
+    const previousCache = new Map(moduleIds.map((moduleId) => [moduleId, require.cache[moduleId]]));
+
+    try {
+        for (const mission of missions) {
+            writeMissionJson(missionsRoot, mission.id, mission);
+        }
+
+        for (const moduleId of moduleIds) {
+            delete require.cache[moduleId];
+        }
+
+        require.cache[require.resolve("../src/config/paths")] = {
+            exports: {
+                ...actualPaths,
+                assetsPath: path.join(tempDir, "assets"),
+                databasePath: path.join(tempDir, "database.db"),
+                missionsPath: missionsRoot,
+                projectRootPath: tempDir,
+                rawMissionsPath: path.join(tempDir, "raw-missions"),
+                systemStatePath: path.join(tempDir, "system.json")
+            },
+            filename: require.resolve("../src/config/paths"),
+            id: require.resolve("../src/config/paths"),
+            loaded: true
+        };
+        require.cache[require.resolve("../src/services/missionPublicationRepository")] = {
+            exports: {
+                getMissionPublication: () => null,
+                markMissionPublicationClosed: () => null,
+                saveMissionPublication: () => null
+            },
+            filename: require.resolve("../src/services/missionPublicationRepository"),
+            id: require.resolve("../src/services/missionPublicationRepository"),
+            loaded: true
+        };
+        require.cache[require.resolve("../src/services/streakService")] = {
+            exports: {
+                resetStreaksForMissedMission: () => 0
+            },
+            filename: require.resolve("../src/services/streakService"),
+            id: require.resolve("../src/services/streakService"),
+            loaded: true
+        };
+
+        const scheduler = require("../src/scheduler/missionScheduler");
+        const missionService = require("../src/services/missionService");
+
+        return await callback({
+            missionService,
+            missionsRoot,
+            scheduler
+        });
+    } finally {
+        for (const [moduleId, cacheEntry] of previousCache.entries()) {
+            if (cacheEntry) {
+                require.cache[moduleId] = cacheEntry;
+            } else {
+                delete require.cache[moduleId];
+            }
+        }
+
+        fs.rmSync(tempDir, {
+            recursive: true,
+            force: true
+        });
+    }
+}
+
+function createLogOnlyClient() {
+    return {
+        channels: {
+            fetch: async () => ({
+                send: async () => ({})
+            })
+        }
+    };
+}
+
+test("domyslne dependencies zwyklego schedulera zawieraja markMissionClosed z missionService", async () => {
+    await withSchedulerUsingTempMissions([
+        createMission(1)
+    ], async ({ missionService, scheduler }) => {
+        assert.equal(typeof scheduler._test.defaultPublishDependencies.markMissionClosed, "function");
+        assert.equal(scheduler._test.defaultPublishDependencies.markMissionClosed, missionService.markMissionClosed);
+    });
+});
+
+test("zwykly scheduler zamyka misje przez realne missionService.markMissionClosed", async () => {
+    await withSilentMissionLogs(async () => {
+        await withSchedulerUsingTempMissions([
+            createMission(1, {
+                closeAt: undefined,
+                publishAt: undefined
+            })
+        ], async ({ missionsRoot, scheduler }) => {
+            await scheduler.closeDueMissions(
+                createLogOnlyClient(),
+                new Date("2026-07-09T15:01:00+02:00")
+            );
+
+            assert.equal(readMissionJson(missionsRoot, 1).closed, true);
+        });
+    });
+});
+
+test("zwykly scheduler moze opublikowac nastepna misje po zamknieciu poprzedniej", async () => {
+    await withSilentMissionLogs(async () => {
+        await withSchedulerUsingTempMissions([
+            createMission(1),
+            createMission(2)
+        ], async ({ scheduler }) => {
+            const client = createLogOnlyClient();
+            const publishedMissionIds = [];
+
+            await scheduler.closeDueMissions(client, new Date("2026-07-09T15:01:00+02:00"));
+
+            const dependencies = {
+                ...scheduler._test.defaultPublishDependencies,
+                findPublishedMissionMessage: async () => null,
+                getMissionPublication: () => null,
+                missionMessageExists: async () => false,
+                publishMission: async (unusedClient, mission) => {
+                    publishedMissionIds.push(mission.id);
+
+                    return {
+                        ...mission,
+                        messageId: `message-${mission.number}`,
+                        published: true
+                    };
+                },
+                saveMissionPublication: () => null
+            };
+
+            const result = await scheduler.publishDueMissions(
+                client,
+                new Date("2026-07-09T16:01:00+02:00"),
+                dependencies
+            );
+
+            assert.equal(result.id, 2);
+            assert.deepEqual(publishedMissionIds, [2]);
+        });
+    });
+});
+
+test("zwykly scheduler nie zamyka misji #15 przed terminem", async () => {
+    await withSilentMissionLogs(async () => {
+        const missions = Array.from({ length: 15 }, (_, index) => createMission(index + 1, {
+            closed: index + 1 < 15
+        }));
+
+        await withSchedulerUsingTempMissions(missions, async ({ missionsRoot, scheduler }) => {
+            await scheduler.closeDueMissions(
+                createLogOnlyClient(),
+                new Date("2026-08-04T16:30:00+02:00")
+            );
+
+            assert.equal(readMissionJson(missionsRoot, 15).closed, false);
+        });
+    });
+});
 
 test("pomija misje historyczne i niczego nie publikuje", async () => {
     await withSilentMissionLogs(async () => {

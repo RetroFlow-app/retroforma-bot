@@ -35,6 +35,7 @@ const defaultPublishDependencies = {
     },
     getScheduledMissionQueue: buildMissionQueue,
     getQueuedMissionsDueForClose,
+    markMissionClosed,
     markMissionPublished,
     missionMessageExists,
     publishMission,
@@ -295,6 +296,7 @@ module.exports = {
     publishDueMissions,
     startMissionScheduler,
     _test: {
+        defaultPublishDependencies,
         isMissionActive,
         isMissionHistorical
     }
