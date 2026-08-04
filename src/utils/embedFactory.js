@@ -139,7 +139,7 @@ function createMissionEmbed(mission, options = {}) {
     const submitChannel = config.submitChannelId ? `<#${config.submitChannelId}>` : "#oddaj-projekt";
     const description = [
         SEPARATOR,
-        `🎯 MISJA CAD #${mission.number}`,
+        "🎯 MISJA CAD",
         SEPARATOR,
         "",
         "📝 Zadanie",
@@ -155,6 +155,7 @@ function createMissionEmbed(mission, options = {}) {
         "🏅 Nagroda",
         "",
         `${Number(mission.points) || 0} PP`,
+        `${Number(mission.xp) || 100} XP`,
         "",
         "📅 Termin oddawania",
         "",

@@ -135,9 +135,9 @@ function createDateInTimezone(dateParts, timezone) {
     return resultDate;
 }
 
-// Wylicza datę publikacji i zamknięcia misji na podstawie jej numeru.
-function getMissionSchedule(missionId) {
-    const missionNumber = Number(missionId);
+// Wylicza datę publikacji i zamknięcia misji na podstawie slotu harmonogramu.
+function getMissionSchedule(scheduleSlot) {
+    const missionNumber = Number(scheduleSlot);
 
     if (!Number.isInteger(missionNumber) || missionNumber <= 0) {
         throw new Error("Numer misji musi być dodatnią liczbą całkowitą.");
@@ -163,10 +163,11 @@ function getMissionSchedule(missionId) {
 }
 
 // Dokleja wyliczone terminy do obiektu misji, ignorując ręcznie wpisane publishAt/closeAt.
-function applyMissionSchedule(mission) {
+function applyMissionSchedule(mission, scheduleSlot = mission.id) {
     return {
         ...mission,
-        ...getMissionSchedule(mission.id)
+        scheduleSlot,
+        ...getMissionSchedule(scheduleSlot)
     };
 }
 

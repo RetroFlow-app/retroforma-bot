@@ -165,6 +165,7 @@ test("initializeDatabase tworzy mission_publications bez naruszania danych użyt
         assert.deepEqual(db.prepare("SELECT * FROM users_badges WHERE discord_id = ?").get("123"), userBadgeBefore);
         assert.ok(getTableNames(db).includes("mission_publications"));
         assert.ok(getTableNames(db).includes("admin_point_transactions"));
+        assert.ok(getTableNames(db).includes("admin_xp_transactions"));
     } finally {
         close();
     }
