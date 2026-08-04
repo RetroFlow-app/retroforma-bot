@@ -279,6 +279,10 @@ function registerCommandHandler(client) {
 }
 
 module.exports = {
+    _test: {
+        commands,
+        handleSlashCommand
+    },
     registerCommandHandler,
     registerSlashCommands
 };

@@ -224,6 +224,49 @@ function syncTerminalShopItemCode(db) {
     `).run("terminal", "Terminal Polowy", legacyTerminal.id);
 }
 
+// Usuwa jednorazowy stan po testowej Misji EXTREME #000 bez dotykania produkcyjnej rotacji.
+function cleanupExtremeTestMissionState(db, logger = console) {
+    const testState = db.prepare(`
+        SELECT *
+        FROM extreme_mission_state
+        WHERE id = 1
+          AND last_publish_date LIKE 'EXTREME_TEST_%'
+    `).get();
+
+    if (!testState) {
+        return null;
+    }
+
+    const updatedAt = new Date().toISOString();
+
+    db.prepare(`
+        UPDATE extreme_mission_state
+        SET current_sequence = 0,
+            current_number = 0,
+            status = 'IDLE',
+            message_id = NULL,
+            published_at = NULL,
+            closed_at = NULL,
+            last_publish_date = NULL,
+            updated_at = ?
+        WHERE id = 1
+          AND last_publish_date LIKE 'EXTREME_TEST_%'
+    `).run(updatedAt);
+
+    const productionState = db.prepare(`
+        SELECT *
+        FROM extreme_mission_state
+        WHERE id = 1
+    `).get();
+
+    logger.info("[EXTREME CLEANUP] Usunięto pozostałość testowej misji #000.");
+
+    return {
+        after: productionState,
+        before: testState
+    };
+}
+
 function initializeDatabase(db) {
     db.exec(`
         CREATE TABLE IF NOT EXISTS users (
@@ -447,6 +490,7 @@ function initializeDatabase(db) {
 
     migrateUsersTable(db);
     migrateSubmissionsTable(db);
+    cleanupExtremeTestMissionState(db);
     syncTerminalShopItemCode(db);
     seedShopItems(db);
     syncShopItemCategories(db);
@@ -455,6 +499,7 @@ function initializeDatabase(db) {
 }
 
 module.exports = {
+    cleanupExtremeTestMissionState,
     disableRemovedShopItems,
     seedShopItems,
     syncShopItemCategories,

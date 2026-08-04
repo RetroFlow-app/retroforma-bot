@@ -22,6 +22,7 @@ const {
     publishNextExtremeMission
 } = require("../src/services/extremeMissionService");
 const {
+    checkExtremeMissions,
     shouldCloseExtremeMission,
     shouldPublishExtremeMission
 } = require("../src/scheduler/extremeMissionScheduler");
@@ -416,4 +417,68 @@ test("akceptacja Misji EXTREME używa nagród 20 PP i 100 XP", () => {
     assert.equal(reviewTestApi.getMissionPoints(mission), 20);
     assert.equal(reviewTestApi.getMissionXP(mission), 100);
     assert.equal(getExtremeMissionByReviewId(missionId).affectsStreak, false);
+});
+
+test("po cleanupie starego testu scheduler moze opublikowac produkcyjna Misje EXTREME #01", async () => {
+    const context = createTempContext([1, 2, 3]);
+    const publishedNumbers = [];
+
+    try {
+        context.db.prepare(`
+            INSERT OR REPLACE INTO extreme_mission_state (
+                id,
+                current_sequence,
+                current_number,
+                status,
+                message_id,
+                published_at,
+                closed_at,
+                last_publish_date,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+            1,
+            99,
+            0,
+            "ACTIVE",
+            "message-test-000",
+            "2026-07-30T19:00:00.000Z",
+            null,
+            "EXTREME_TEST_000_2026-07-30_21:00",
+            "2026-07-30T19:00:00.000Z"
+        );
+
+        initializeDatabase(context.db);
+
+        const result = await checkExtremeMissions(
+            {},
+            new Date("2026-08-05T16:00:00+02:00"),
+            {
+                assetRoots: context.assetRoots,
+                disableLock: true,
+                logger: {
+                    error: () => {}
+                },
+                publishExtremeMission: async (client, mission) => {
+                    publishedNumbers.push(mission.extremeNumber);
+
+                    return {
+                        id: `extreme-message-${mission.displayNumber}`
+                    };
+                },
+                repository: context.repository
+            }
+        );
+        const state = context.repository.getState();
+
+        assert.deepEqual(publishedNumbers, [1]);
+        assert.equal(result.publishedMission.mission.displayNumber, "01");
+        assert.equal(state.status, EXTREME_STATUS.ACTIVE);
+        assert.equal(state.current_sequence, 1);
+        assert.equal(state.current_number, 1);
+        assert.equal(state.last_publish_date, "2026-08-05");
+    } finally {
+        context.close();
+    }
 });
