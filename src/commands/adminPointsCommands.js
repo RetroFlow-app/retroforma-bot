@@ -11,6 +11,10 @@ const {
     createAdminPointsService
 } = require("../services/adminPointsService");
 const {
+    ADMIN_REWARD_NOTIFICATION_FAILED_MESSAGE,
+    sendAdminRewardNotification
+} = require("../services/adminRewardNotificationService");
+const {
     createErrorEmbed,
     createInfoEmbed,
     createSuccessEmbed
@@ -109,8 +113,13 @@ async function sendNoPermission(interaction) {
     });
 }
 
-function createAdminPointsSuccessEmbed({ rankingUpdated, result, targetUser }) {
-    return createSuccessEmbed({
+function createAdminPointsSuccessEmbed({
+    notificationResult = null,
+    rankingUpdated,
+    result,
+    targetUser
+}) {
+    const embed = createSuccessEmbed({
         title: "✅ Zmieniono Punkty Poligonu",
         description: [
             `Użytkownik: <@${targetUser.id}>`,
@@ -129,6 +138,12 @@ function createAdminPointsSuccessEmbed({ rankingUpdated, result, targetUser }) {
             `Ranking odświeżony: ${rankingUpdated ? "tak" : "nie"}`
         ].join("\n")
     });
+
+    if (notificationResult && notificationResult.delivered === false) {
+        embed.setDescription(`${embed.data.description}\n\n${ADMIN_REWARD_NOTIFICATION_FAILED_MESSAGE}`);
+    }
+
+    return embed;
 }
 
 function createAdminPointsHistoryEmbed(rows, targetUser = null) {
@@ -310,10 +325,22 @@ const adminPointsCommand = {
                 targetUser
             });
 
+            stage = "notification";
+            const notificationResult = result.operation === ADMIN_POINT_OPERATIONS.ADD
+                ? await (dependencies.sendAdminRewardNotification || sendAdminRewardNotification)({
+                    client: interaction.client,
+                    logger,
+                    result,
+                    targetUser,
+                    type: "PP"
+                })
+                : null;
+
             stage = "reply";
             await interaction.editReply({
                 embeds: [
                     createAdminPointsSuccessEmbed({
+                        notificationResult,
                         rankingUpdated,
                         result,
                         targetUser

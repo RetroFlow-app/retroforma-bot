@@ -232,7 +232,7 @@ function createExtremeMissionEmbed(mission, options = {}) {
 
 function createRankingEmbed({ topUsers, stats, updatedAt = new Date() }) {
     const medals = ["🥇", "🥈", "🥉"];
-    const rankingLines = ["TOP 10", ""];
+    const rankingLines = ["TOP 30", ""];
 
     if (topUsers.length === 0) {
         rankingLines.push("Brak kadetów w rankingu.");
@@ -363,7 +363,43 @@ function createLogEmbed({ title = "Log systemowy", description, fields = [] }) {
         .setDescription(description), fields);
 }
 
+function createAdminPpRewardNotificationEmbed({ amount, balanceAfter, reason }) {
+    return createBaseEmbed("colorSuccess")
+        .setTitle("🎁 Dodatkowa nagroda")
+        .setDescription([
+            `🪙 Otrzymujesz **+${amount} PP**`,
+            "",
+            "📝 **Powód**",
+            reason || "Nie podano",
+            "",
+            `Twoje nowe saldo: **${balanceAfter} PP**`
+        ].join("\n"));
+}
+
+function createAdminXpRewardNotificationEmbed({
+    amount,
+    levelAfter,
+    levelBefore,
+    reason,
+    xpAfter,
+    xpBefore
+}) {
+    return createBaseEmbed("colorSuccess")
+        .setTitle("🎁 Dodatkowa nagroda")
+        .setDescription([
+            `⭐ Otrzymujesz **+${amount} XP**`,
+            "",
+            "📝 **Powód**",
+            reason || "Nie podano",
+            "",
+            `XP: **${xpBefore} → ${xpAfter}**`,
+            `Poziom: **${levelBefore} → ${levelAfter}**`
+        ].join("\n"));
+}
+
 module.exports = {
+    createAdminPpRewardNotificationEmbed,
+    createAdminXpRewardNotificationEmbed,
     createErrorEmbed,
     createExtremeMissionEmbed,
     createInfoEmbed,

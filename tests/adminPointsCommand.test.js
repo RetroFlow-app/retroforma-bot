@@ -151,6 +151,7 @@ function createUser(id, options = {}) {
     return {
         bot: Boolean(options.bot),
         id,
+        send: options.send || (async () => {}),
         tag: options.tag || `Kadet#${id.slice(-4)}`,
         username: options.username || `Kadet-${id}`
     };
@@ -636,6 +637,147 @@ test("błąd bazy nie kończy się brakiem odpowiedzi Discorda", async () => {
         assert.deepEqual(interaction.calls.map((call) => call.name), ["deferReply", "editReply"]);
         assert.match(interaction.calls[1].payload.embeds[0].data.description, /Nie udało się zmienić Punktów Poligonu/);
         assert.equal(logger.errors.some((message) => message.includes("DATABASE_DOWN")), true);
+    } finally {
+        context.close();
+    }
+});
+
+test("/admin-punkty dodaj wysyła użytkownikowi DM po udanej transakcji", async () => {
+    const context = createTempContext();
+    const command = getCommand("admin-punkty");
+    const dmCalls = [];
+    const logCalls = [];
+    const targetUser = createUser("target-pp-dm", {
+        send: async (payload) => {
+            dmCalls.push(payload);
+        }
+    });
+    const interaction = createInteraction({
+        amount: 25,
+        operation: ADMIN_POINT_OPERATIONS.ADD,
+        reason: "Bonus za dokładniejsze odwzorowanie modelu.",
+        targetUser
+    });
+
+    try {
+        context.setUserStats(targetUser.id, {
+            pp: 458,
+            ppTotalEarned: 1000
+        });
+
+        await command.execute(interaction, createCommandDependencies(context, {
+            logToChannel: async () => {
+                logCalls.push(true);
+            }
+        }));
+
+        const user = context.getUser(targetUser.id);
+        const description = dmCalls[0].embeds[0].data.description;
+
+        assert.equal(user.pp, 483);
+        assert.equal(user.pp_total_earned, 1000);
+        assert.equal(context.getTransactions().length, 1);
+        assert.equal(dmCalls.length, 1);
+        assert.match(description, /\+25 PP/);
+        assert.match(description, /Bonus za dokładniejsze odwzorowanie modelu\./);
+        assert.match(description, /483 PP/);
+        assert.equal(logCalls.length, 1);
+    } finally {
+        context.close();
+    }
+});
+
+test("błąd DM po /admin-punkty dodaj nie cofa przyznanych PP", async () => {
+    const context = createTempContext();
+    const command = getCommand("admin-punkty");
+    const logger = createLogger();
+    const targetUser = createUser("target-pp-dm-blocked", {
+        send: async () => {
+            throw new Error("DM_BLOCKED");
+        }
+    });
+    const interaction = createInteraction({
+        amount: 30,
+        operation: ADMIN_POINT_OPERATIONS.ADD,
+        targetUser
+    });
+
+    try {
+        context.setUserStats(targetUser.id, {
+            pp: 100,
+            ppTotalEarned: 700
+        });
+
+        await command.execute(interaction, createCommandDependencies(context, {
+            logger
+        }));
+
+        const user = context.getUser(targetUser.id);
+        const adminDescription = interaction.calls.at(-1).payload.embeds[0].data.description;
+
+        assert.equal(user.pp, 130);
+        assert.equal(user.pp_total_earned, 700);
+        assert.equal(context.getTransactions().length, 1);
+        assert.equal(logger.errors.some((message) => message.includes("[ADMIN_REWARD_NOTIFICATION]")), true);
+        assert.equal(logger.errors.some((message) => message.includes("DM_BLOCKED")), true);
+        assert.match(adminDescription, /Nagroda/);
+    } finally {
+        context.close();
+    }
+});
+
+test("/admin-punkty nie wysyła DM, gdy transakcja w bazie się nie powiedzie", async () => {
+    const context = createTempContext();
+    const command = getCommand("admin-punkty");
+    const interaction = createInteraction();
+    let notificationCalls = 0;
+
+    try {
+        await command.execute(interaction, createCommandDependencies(context, {
+            adminPointsService: {
+                changePoints() {
+                    throw new Error("DATABASE_DOWN");
+                }
+            },
+            sendAdminRewardNotification: async () => {
+                notificationCalls += 1;
+            }
+        }));
+
+        assert.equal(notificationCalls, 0);
+        assert.deepEqual(interaction.calls.map((call) => call.name), ["deferReply", "editReply"]);
+    } finally {
+        context.close();
+    }
+});
+
+test("/admin-punkty odejmij i ustaw nie wysyłają DM", async () => {
+    const context = createTempContext();
+    const command = getCommand("admin-punkty");
+    let notificationCalls = 0;
+
+    try {
+        for (const operation of [ADMIN_POINT_OPERATIONS.SUBTRACT, ADMIN_POINT_OPERATIONS.SET]) {
+            const targetUser = createUser(`target-pp-no-dm-${operation}`);
+            const interaction = createInteraction({
+                amount: 20,
+                operation,
+                targetUser
+            });
+
+            context.setUserStats(targetUser.id, {
+                pp: 100,
+                ppTotalEarned: 500
+            });
+
+            await command.execute(interaction, createCommandDependencies(context, {
+                sendAdminRewardNotification: async () => {
+                    notificationCalls += 1;
+                }
+            }));
+        }
+
+        assert.equal(notificationCalls, 0);
     } finally {
         context.close();
     }

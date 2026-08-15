@@ -155,6 +155,7 @@ function createUser(id, options = {}) {
     return {
         bot: Boolean(options.bot),
         id,
+        send: options.send || (async () => {}),
         tag: options.tag || `Kadet#${id.slice(-4)}`,
         username: options.username || `Kadet-${id}`
     };
@@ -630,6 +631,148 @@ test("błąd bazy nie kończy się brakiem odpowiedzi Discorda", async () => {
         assert.deepEqual(interaction.calls.map((call) => call.name), ["deferReply", "editReply"]);
         assert.match(interaction.calls[1].payload.embeds[0].data.description, /Nie udało się zmienić XP/);
         assert.equal(logger.errors.some((message) => message.includes("DATABASE_DOWN")), true);
+    } finally {
+        context.close();
+    }
+});
+
+test("/admin-xp dodaj wysyła użytkownikowi DM po udanej transakcji", async () => {
+    const context = createTempContext();
+    const command = getCommand("admin-xp");
+    const dmCalls = [];
+    const logCalls = [];
+    const targetUser = createUser("target-xp-dm", {
+        send: async (payload) => {
+            dmCalls.push(payload);
+        }
+    });
+    const interaction = createInteraction({
+        amount: 400,
+        operation: ADMIN_XP_OPERATIONS.ADD,
+        reason: "Bonus za wyjątkową dokumentację projektu.",
+        targetUser
+    });
+
+    try {
+        context.setUserStats(targetUser.id, {
+            xp: 100,
+            level: 1
+        });
+
+        await command.execute(interaction, createCommandDependencies(context, {
+            logToChannel: async () => {
+                logCalls.push(true);
+            }
+        }));
+
+        const user = context.getUser(targetUser.id);
+        const description = dmCalls[0].embeds[0].data.description;
+
+        assert.equal(user.xp, 500);
+        assert.equal(user.level, 3);
+        assert.equal(context.getTransactions().length, 1);
+        assert.equal(dmCalls.length, 1);
+        assert.match(description, /\+400 XP/);
+        assert.match(description, /Bonus za wyjątkową dokumentację projektu\./);
+        assert.match(description, /100 → 500/);
+        assert.match(description, /1 → 3/);
+        assert.equal(logCalls.length, 1);
+    } finally {
+        context.close();
+    }
+});
+
+test("błąd DM po /admin-xp dodaj nie cofa XP ani poziomu", async () => {
+    const context = createTempContext();
+    const command = getCommand("admin-xp");
+    const logger = createLogger();
+    const targetUser = createUser("target-xp-dm-blocked", {
+        send: async () => {
+            throw new Error("DM_BLOCKED");
+        }
+    });
+    const interaction = createInteraction({
+        amount: 100,
+        operation: ADMIN_XP_OPERATIONS.ADD,
+        targetUser
+    });
+
+    try {
+        context.setUserStats(targetUser.id, {
+            xp: 200,
+            level: 1
+        });
+
+        await command.execute(interaction, createCommandDependencies(context, {
+            logger
+        }));
+
+        const user = context.getUser(targetUser.id);
+        const adminDescription = interaction.calls.at(-1).payload.embeds[0].data.description;
+
+        assert.equal(user.xp, 300);
+        assert.equal(user.level, 2);
+        assert.equal(context.getTransactions().length, 1);
+        assert.equal(logger.errors.some((message) => message.includes("[ADMIN_REWARD_NOTIFICATION]")), true);
+        assert.equal(logger.errors.some((message) => message.includes("DM_BLOCKED")), true);
+        assert.match(adminDescription, /Nagroda/);
+    } finally {
+        context.close();
+    }
+});
+
+test("/admin-xp nie wysyła DM, gdy transakcja w bazie się nie powiedzie", async () => {
+    const context = createTempContext();
+    const command = getCommand("admin-xp");
+    const interaction = createInteraction();
+    let notificationCalls = 0;
+
+    try {
+        await command.execute(interaction, createCommandDependencies(context, {
+            adminXpService: {
+                changeXP() {
+                    throw new Error("DATABASE_DOWN");
+                }
+            },
+            sendAdminRewardNotification: async () => {
+                notificationCalls += 1;
+            }
+        }));
+
+        assert.equal(notificationCalls, 0);
+        assert.deepEqual(interaction.calls.map((call) => call.name), ["deferReply", "editReply"]);
+    } finally {
+        context.close();
+    }
+});
+
+test("/admin-xp odejmij i ustaw nie wysyłają DM", async () => {
+    const context = createTempContext();
+    const command = getCommand("admin-xp");
+    let notificationCalls = 0;
+
+    try {
+        for (const operation of [ADMIN_XP_OPERATIONS.SUBTRACT, ADMIN_XP_OPERATIONS.SET]) {
+            const targetUser = createUser(`target-xp-no-dm-${operation}`);
+            const interaction = createInteraction({
+                amount: 100,
+                operation,
+                targetUser
+            });
+
+            context.setUserStats(targetUser.id, {
+                xp: 500,
+                level: 3
+            });
+
+            await command.execute(interaction, createCommandDependencies(context, {
+                sendAdminRewardNotification: async () => {
+                    notificationCalls += 1;
+                }
+            }));
+        }
+
+        assert.equal(notificationCalls, 0);
     } finally {
         context.close();
     }
