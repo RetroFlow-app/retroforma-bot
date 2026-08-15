@@ -42,7 +42,7 @@ function saveSystemState(state) {
     );
 }
 
-// Pobiera TOP 10 według łącznej liczby zdobytych PP, a nie aktualnego salda.
+// Pobiera TOP 30 według łącznej liczby zdobytych PP, a nie aktualnego salda.
 function getTopUsersFromDatabase(database = getDefaultDb()) {
     return database.prepare(`
         SELECT
@@ -61,7 +61,7 @@ function getTopUsersFromDatabase(database = getDefaultDb()) {
                  level DESC,
                  LOWER(COALESCE(username, '')) ASC,
                  id ASC
-        LIMIT 10
+        LIMIT 30
     `).all();
 }
 

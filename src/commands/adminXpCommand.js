@@ -10,6 +10,10 @@ const {
     MAX_ADMIN_XP_AMOUNT,
     createAdminXpService
 } = require("../services/adminXpService");
+const {
+    ADMIN_REWARD_NOTIFICATION_FAILED_MESSAGE,
+    sendAdminRewardNotification
+} = require("../services/adminRewardNotificationService");
 const { hasAdminPointPermission } = require("./adminPointsCommands");
 const {
     createErrorEmbed,
@@ -58,8 +62,12 @@ async function sendNoPermission(interaction) {
     });
 }
 
-function createAdminXpSuccessEmbed({ result, targetUser }) {
-    return createSuccessEmbed({
+function createAdminXpSuccessEmbed({
+    notificationResult = null,
+    result,
+    targetUser
+}) {
+    const embed = createSuccessEmbed({
         title: "✅ Zmieniono XP użytkownika",
         description: [
             `Użytkownik: <@${targetUser.id}>`,
@@ -72,6 +80,12 @@ function createAdminXpSuccessEmbed({ result, targetUser }) {
             `Powód: ${result.reason}`
         ].join("\n")
     });
+
+    if (notificationResult && notificationResult.delivered === false) {
+        embed.setDescription(`${embed.data.description}\n\n${ADMIN_REWARD_NOTIFICATION_FAILED_MESSAGE}`);
+    }
+
+    return embed;
 }
 
 async function writeAdminXpLog({
@@ -212,10 +226,22 @@ const adminXpCommand = {
                 targetUser
             });
 
+            stage = "notification";
+            const notificationResult = result.operation === ADMIN_XP_OPERATIONS.ADD
+                ? await (dependencies.sendAdminRewardNotification || sendAdminRewardNotification)({
+                    client: interaction.client,
+                    logger,
+                    result,
+                    targetUser,
+                    type: "XP"
+                })
+                : null;
+
             stage = "reply";
             await interaction.editReply({
                 embeds: [
                     createAdminXpSuccessEmbed({
+                        notificationResult,
                         result,
                         targetUser
                     })

@@ -223,6 +223,32 @@ test("ranking sortuje po pp_total_earned, potem XP, level i nickname", () => {
     }
 });
 
+test("ranking pobiera maksymalnie 30 uzytkownikow bez zmiany sortowania", () => {
+    const context = createTempContext();
+
+    try {
+        for (let index = 1; index <= 35; index += 1) {
+            context.setUserStats(`ranking-top-${String(index).padStart(2, "0")}`, {
+                pp: index,
+                ppTotalEarned: 1000 - index,
+                username: `Kadet ${String(index).padStart(2, "0")}`,
+                xp: index,
+                level: 1,
+                missionsCompleted: index
+            });
+        }
+
+        const ranking = getTopUsersFromDatabase(context.db);
+
+        assert.equal(ranking.length, 30);
+        assert.equal(ranking[0].discord_id, "ranking-top-01");
+        assert.equal(ranking[29].discord_id, "ranking-top-30");
+        assert.equal(ranking.some((user) => user.discord_id === "ranking-top-31"), false);
+    } finally {
+        context.close();
+    }
+});
+
 test("profil pokazuje aktualne saldo i łącznie zdobyte PP", () => {
     const text = collectProfileCardText({
         missionsCompleted: 3,

@@ -2,7 +2,13 @@ const { registerProfileFont } = require("./profileAssetService");
 const { getCurrentLevelProgress } = require("./pointsService");
 
 const CARD_WIDTH = 1080;
-const CARD_HEIGHT = 1610;
+const CARD_HEIGHT = 2440;
+const RANKING_USER_LIMIT = 30;
+const TABLE_FIRST_POSITION = 4;
+const TABLE_ROW_HEIGHT = 44;
+const TABLE_PANEL_Y = 846;
+const TABLE_PANEL_BOTTOM_GAP = 35;
+const FOOTER_Y = CARD_HEIGHT - 180;
 const FALLBACK_FONT = "\"DejaVu Sans\", \"Noto Sans\", \"Liberation Sans\", \"Segoe UI\", \"Arial\", sans-serif";
 let activeFontFamily = FALLBACK_FONT;
 
@@ -1309,7 +1315,7 @@ function drawPodiumSeparator(ctx) {
     drawLine(ctx, x + 36, y + 5, x + width - 36, y + 5, "rgba(148,163,184,0.16)", 1);
 }
 
-function drawTableHeader(ctx, x, y, width) {
+function drawTableHeader(ctx, x, y, width, tableBodyHeight) {
     const dividerColor = "rgba(148, 163, 184, 0.24)";
 
     ctx.fillStyle = "#c6d0dc";
@@ -1326,12 +1332,12 @@ function drawTableHeader(ctx, x, y, width) {
 
     drawLine(ctx, x + 12, y + 18, x + width - 12, y + 18, "rgba(148, 163, 184, 0.24)", 1.2);
     [92, 374, 520, 606, 718, 838].forEach((offset) => {
-        drawLine(ctx, x + offset, y - 28, x + offset, y + 458, dividerColor, 1);
+        drawLine(ctx, x + offset, y - 28, x + offset, y + tableBodyHeight + 24, dividerColor, 1);
     });
 }
 
-function drawListRow(ctx, user, avatarImage, x, y, width, index) {
-    const rowHeight = 60;
+function drawListRow(ctx, user, avatarImage, x, y, width, index, rowHeight = TABLE_ROW_HEIGHT) {
+    const centerY = y + rowHeight / 2;
     const rowFill = index % 2 === 0 ? "rgba(14, 22, 31, 0.82)" : "rgba(5, 10, 16, 0.82)";
 
     fillRoundedRect(ctx, x, y, width, rowHeight, 4, rowFill);
@@ -1340,68 +1346,93 @@ function drawListRow(ctx, user, avatarImage, x, y, width, index) {
         drawLine(ctx, x + offset, y + 5, x + offset, y + rowHeight - 5, "rgba(148, 163, 184, 0.13)", 1);
     });
 
-    drawFittedText(ctx, `#${user.position}`, x + 20, y + 39, 54, {
+    drawFittedText(ctx, `#${user.position}`, x + 20, centerY + 8, 54, {
         color: "#d7e2ef",
-        maxSize: 27,
-        minSize: 16,
+        maxSize: 23,
+        minSize: 13,
         weight: "900"
     });
 
-    drawListAvatar(ctx, user, avatarImage, x + 92, y + 30, 23);
-    drawFittedText(ctx, trimText(user.username, 25), x + 126, y + 40, 236, {
+    drawListAvatar(ctx, user, avatarImage, x + 92, centerY, 18);
+    drawFittedText(ctx, trimText(user.username, 25), x + 126, centerY + 8, 236, {
         color: COLORS.text,
-        maxSize: 21,
+        maxSize: 18,
         minSize: 12,
         weight: "900"
     });
 
-    drawFittedText(ctx, user.rankName, x + 390, y + 40, 118, {
+    drawFittedText(ctx, user.rankName, x + 390, centerY + 8, 118, {
         color: "#d7e2ef",
-        maxSize: 16,
+        maxSize: 15,
         minSize: 10,
         weight: "900"
     });
-    drawFittedText(ctx, `LV.${user.level}`, x + 555, y + 40, 70, {
+    drawFittedText(ctx, `LV.${user.level}`, x + 555, centerY + 8, 70, {
         color: COLORS.green,
-        maxSize: 19,
+        maxSize: 17,
         minSize: 10,
         weight: "900",
         align: "center"
     });
-    drawFittedText(ctx, `${formatNumber(user.pp)} PP`, x + 664, y + 40, 100, {
+    drawFittedText(ctx, `${formatNumber(user.pp)} PP`, x + 664, centerY + 8, 100, {
         color: COLORS.gold,
-        maxSize: 17,
+        maxSize: 15,
         minSize: 10,
         weight: "900",
         align: "center"
     });
-    drawFittedText(ctx, `${formatNumber(user.xp)} XP`, x + 775, y + 40, 104, {
+    drawFittedText(ctx, `${formatNumber(user.xp)} XP`, x + 775, centerY + 8, 104, {
         color: COLORS.blue,
-        maxSize: 17,
+        maxSize: 15,
         minSize: 10,
         weight: "900",
         align: "center"
     });
-    drawFittedText(ctx, formatNumber(user.missionsCompleted), x + 902, y + 40, 68, {
+    drawFittedText(ctx, formatNumber(user.missionsCompleted), x + 902, centerY + 8, 68, {
         color: COLORS.green,
-        maxSize: 17,
+        maxSize: 15,
         minSize: 10,
         weight: "900",
         align: "center"
     });
 }
 
+function getPodiumUsers(users) {
+    return users.slice(0, TABLE_FIRST_POSITION - 1);
+}
+
+function getTableUsers(users) {
+    return users.slice(TABLE_FIRST_POSITION - 1, RANKING_USER_LIMIT);
+}
+
+function getRankingLayoutMetrics() {
+    const tableBodyHeight = (RANKING_USER_LIMIT - TABLE_FIRST_POSITION + 1) * TABLE_ROW_HEIGHT;
+    const tablePanelHeight = FOOTER_Y - TABLE_PANEL_Y - TABLE_PANEL_BOTTOM_GAP;
+
+    return {
+        cardHeight: CARD_HEIGHT,
+        footerBrandBottom: FOOTER_Y + 166,
+        footerPanelBottom: FOOTER_Y + 112,
+        footerY: FOOTER_Y,
+        tableBodyHeight,
+        tablePanelBottom: TABLE_PANEL_Y + tablePanelHeight,
+        tablePanelHeight,
+        tablePanelY: TABLE_PANEL_Y
+    };
+}
+
 function drawRemainingUsers(ctx, users, avatarImages) {
     const x = 50;
-    const y = 846;
+    const y = TABLE_PANEL_Y;
     const width = 980;
-    const listUsers = users.slice(3, 10);
+    const listUsers = getTableUsers(users);
+    const layout = getRankingLayoutMetrics();
 
-    drawMetalPanel(ctx, x, y, width, 548, 18, TOP_CARD_ACCENTS[1], {
+    drawMetalPanel(ctx, x, y, width, layout.tablePanelHeight, 18, TOP_CARD_ACCENTS[1], {
         alpha: 0.92
     });
 
-    drawFittedText(ctx, "MIEJSCA 4-10", x + 34, y + 48, 300, {
+    drawFittedText(ctx, "MIEJSCA 4-30", x + 34, y + 48, 300, {
         color: COLORS.text,
         maxSize: 28,
         minSize: 16,
@@ -1418,10 +1449,18 @@ function drawRemainingUsers(ctx, users, avatarImages) {
         return;
     }
 
-    drawTableHeader(ctx, x + 20, y + 88, width - 40);
+    drawTableHeader(ctx, x + 20, y + 88, width - 40, layout.tableBodyHeight);
 
     listUsers.forEach((user, index) => {
-        drawListRow(ctx, user, avatarImages[user.discordId], x + 20, y + 112 + index * 60, width - 40, index);
+        drawListRow(
+            ctx,
+            user,
+            avatarImages[user.discordId],
+            x + 20,
+            y + 112 + index * TABLE_ROW_HEIGHT,
+            width - 40,
+            index
+        );
     });
 }
 
@@ -1474,7 +1513,7 @@ function drawFooterPanel(ctx, x, y, width, label, value, accent, iconType) {
 }
 
 function drawFooter(ctx, stats, updatedAt) {
-    const y = 1430;
+    const y = FOOTER_Y;
 
     drawFooterPanel(ctx, 40, y, 310, "Kadetów", formatNumber(stats.user_count), "#8bc34a", "group");
     drawFooterPanel(ctx, 385, y, 310, "Misji ukończonych", formatNumber(stats.completed_missions), COLORS.red, "target");
@@ -1538,7 +1577,7 @@ async function createRankingCard({ users = [], stats = {}, updatedAt = new Date(
         createCanvas,
         loadImage
     } = prepareCanvas();
-    const normalizedUsers = users.slice(0, 10).map(normalizeUser);
+    const normalizedUsers = users.slice(0, RANKING_USER_LIMIT).map(normalizeUser);
     const avatarImages = await loadAvatarImages(loadImage, normalizedUsers);
     const canvas = createCanvas(CARD_WIDTH, CARD_HEIGHT);
     const ctx = canvas.getContext("2d");
@@ -1550,7 +1589,7 @@ async function createRankingCard({ users = [], stats = {}, updatedAt = new Date(
     drawBackground(ctx);
     drawOuterFrame(ctx);
     drawHeader(ctx);
-    drawTopThree(ctx, normalizedUsers.slice(0, 3), avatarImages);
+    drawTopThree(ctx, getPodiumUsers(normalizedUsers), avatarImages);
 
     if (normalizedUsers.length > 0) {
         drawPodiumSeparator(ctx);
@@ -1563,5 +1602,13 @@ async function createRankingCard({ users = [], stats = {}, updatedAt = new Date(
 }
 
 module.exports = {
+    _test: {
+        CARD_HEIGHT,
+        CARD_WIDTH,
+        RANKING_USER_LIMIT,
+        getPodiumUsers,
+        getRankingLayoutMetrics,
+        getTableUsers
+    },
     createRankingCard
 };
